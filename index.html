@@ -1,0 +1,223 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <link rel="icon" href="./favicon.svg" type="image/svg+xml">
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+<meta name="description" content="Crossword Journey — solve clue-driven intersecting words across a travel journal of scenic dioramas." />
+<title>Crossword Journey</title>
+<link rel="stylesheet" href="/css/style.css" />
+</head>
+<body>
+<a class="skip-link" href="#board-region">Skip to crossword board</a>
+
+<!-- Decorative 3D travel-journal diorama; never interactive. -->
+<canvas id="scene" aria-hidden="true"></canvas>
+<p id="scene-fallback" class="scene-fallback" hidden>
+  3D scenery is unavailable in this browser — the game remains fully playable.
+</p>
+
+<div id="app">
+  <!-- Top bar -->
+  <header class="topbar">
+    <div class="brand"><span class="logo" aria-hidden="true">✦</span>
+      <h1>Crossword Journey</h1>
+    </div>
+    <div class="topbar-status" id="topbar-status"></div>
+    <nav class="topbar-nav" aria-label="App">
+      <button type="button" id="nav-help" class="chip-btn">Help</button>
+      <button type="button" id="nav-settings" class="chip-btn">Settings</button>
+    </nav>
+  </header>
+
+  <main class="stage" id="stage">
+
+    <!-- ================= Title / home ================= -->
+    <section id="screen-title" class="screen screen-menu" aria-labelledby="title-heading">
+      <h2 id="title-heading" class="screen-heading">Your travel journal awaits</h2>
+      <p class="lede">Solve clue-driven words across scenic pages. One shared grid every day.</p>
+      <div class="menu-primary">
+        <button type="button" id="btn-play" class="big-btn">▶ Play</button>
+      </div>
+      <div class="menu-secondary" role="group" aria-label="Quick modes">
+        <button type="button" id="btn-daily" class="menu-card">
+          <span class="menu-card-title">Daily Challenge</span>
+          <span class="menu-card-sub" id="daily-sub">One grid per UTC day · ranked</span>
+        </button>
+        <button type="button" id="btn-journey" class="menu-card">
+          <span class="menu-card-title">Journey</span>
+          <span class="menu-card-sub" id="journey-sub">40 authored pages</span>
+        </button>
+        <button type="button" id="btn-profile" class="menu-card">
+          <span class="menu-card-title">Profile</span>
+          <span class="menu-card-sub" id="profile-sub">Guest</span>
+        </button>
+      </div>
+    </section>
+
+    <!-- ================= Mode select ================= -->
+    <section id="screen-modes" class="screen screen-menu" aria-labelledby="modes-heading" hidden>
+      <h2 id="modes-heading" class="screen-heading">Choose a mode</h2>
+      <div class="mode-list" id="mode-list" role="list"></div>
+      <div class="menu-secondary">
+        <button type="button" class="chip-btn" id="btn-modes-back">← Back</button>
+      </div>
+    </section>
+
+    <!-- ================= Play ================= -->
+    <section id="screen-play" class="screen screen-play" aria-labelledby="play-heading" hidden>
+      <h2 id="play-heading" class="visually-hidden">Play</h2>
+
+      <!-- Left rail: objective, progress, clues -->
+      <aside class="rail rail-left" aria-label="Objective and clues">
+        <div class="rail-block">
+          <h3 class="rail-heading">Objective</h3>
+          <p id="objective" class="objective" aria-live="polite">Fill every square with the right letter.</p>
+          <div class="progress-row">
+            <progress id="progress" max="100" value="0" aria-label="Grid completion"></progress>
+            <span id="progress-text">0%</span>
+          </div>
+          <p class="hud-line">Time: <span id="hud-timer">0:00</span><span id="hud-limit"></span></p>
+          <p class="hud-line">Score: <span id="hud-score" aria-live="polite">0</span></p>
+          <p class="hud-line">Streak: <span id="hud-streak">0</span></p>
+        </div>
+        <div class="rail-block clue-block">
+          <h3 class="rail-heading" id="clues-heading">Clues</h3>
+          <div class="clue-lists" id="clue-lists" role="group" aria-labelledby="clues-heading"></div>
+        </div>
+      </aside>
+
+      <!-- Center: board -->
+      <div class="board-region" id="board-region">
+        <p id="board-summary" class="visually-hidden" aria-live="polite"></p>
+        <div id="board" class="board" role="grid" aria-label="Crossword grid" tabindex="-1"></div>
+        <p id="tutorial-banner" class="tutorial-banner" hidden></p>
+      </div>
+
+      <!-- Right rail: current clue + actions -->
+      <aside class="rail rail-right" aria-label="Current clue and actions">
+        <div class="rail-block">
+          <h3 class="rail-heading">Current clue</h3>
+          <p id="current-clue" class="current-clue" aria-live="polite">Select a square to begin.</p>
+        </div>
+        <div class="rail-block actions" role="group" aria-label="Round actions">
+          <button type="button" id="act-check-word" class="act-btn" title="C">Check word</button>
+          <button type="button" id="act-check-grid" class="act-btn" title="G">Check grid</button>
+          <button type="button" id="act-reveal" class="act-btn" title="H">Reveal letter</button>
+          <button type="button" id="act-give-up" class="act-btn act-danger">Give up</button>
+          <button type="button" id="act-pause" class="act-btn" title="Esc">Pause</button>
+        </div>
+      </aside>
+    </section>
+
+    <!-- ================= Results ================= -->
+    <section id="screen-results" class="screen screen-menu" aria-labelledby="results-heading" hidden>
+      <h2 id="results-heading" class="screen-heading">Results</h2>
+      <p id="results-live" class="visually-hidden" aria-live="assertive"></p>
+      <div class="results-card">
+        <p id="results-headline" class="results-headline"></p>
+        <dl id="results-breakdown" class="breakdown"></dl>
+        <p id="results-meta" class="results-meta"></p>
+        <div id="results-achievements" class="achievements" aria-label="Achievements unlocked"></div>
+        <p id="results-rank" class="results-meta"></p>
+      </div>
+      <div class="menu-secondary">
+        <button type="button" id="btn-retry" class="big-btn">Retry</button>
+        <button type="button" id="btn-next" class="menu-card"><span class="menu-card-title" id="next-label">Next</span></button>
+        <button type="button" id="btn-results-home" class="chip-btn">Home</button>
+      </div>
+    </section>
+
+    <!-- ================= Settings ================= -->
+    <section id="screen-settings" class="screen screen-menu" aria-labelledby="settings-heading" hidden>
+      <h2 id="settings-heading" class="screen-heading">Settings</h2>
+      <form id="settings-form" class="settings-form">
+        <fieldset>
+          <legend>Profile</legend>
+          <label>Display name
+            <input type="text" id="set-name" maxlength="24" autocomplete="off" />
+          </label>
+        </fieldset>
+        <fieldset>
+          <legend>Audio</legend>
+          <label>Music <input type="range" id="set-vol-music" min="0" max="100" /></label>
+          <label>Effects <input type="range" id="set-vol-effects" min="0" max="100" /></label>
+          <label>Ambience <input type="range" id="set-vol-ambience" min="0" max="100" /></label>
+        </fieldset>
+        <fieldset>
+          <legend>Graphics</legend>
+          <label>Theme <select id="set-theme"></select></label>
+          <label>Quality
+            <select id="set-quality">
+              <option value="low">Low</option>
+              <option value="medium">Medium</option>
+              <option value="high">High</option>
+            </select>
+          </label>
+        </fieldset>
+        <fieldset>
+          <legend>Accessibility</legend>
+          <label><input type="checkbox" id="set-reduced-motion" /> Reduce motion</label>
+          <label><input type="checkbox" id="set-high-contrast" /> High contrast</label>
+          <label><input type="checkbox" id="set-cvd" /> Color-vision-safe markers</label>
+          <label><input type="checkbox" id="set-large-text" /> Larger text</label>
+          <label><input type="checkbox" id="set-left-handed" /> Left-handed layout</label>
+          <label><input type="checkbox" id="set-haptics" /> Haptics (vibration)</label>
+        </fieldset>
+      </form>
+      <div class="menu-secondary">
+        <button type="button" id="btn-replay-tutorial" class="chip-btn">Replay tutorial</button>
+        <button type="button" id="btn-settings-back" class="chip-btn">← Back</button>
+      </div>
+    </section>
+
+    <!-- ================= Help ================= -->
+    <section id="screen-help" class="screen screen-menu" aria-labelledby="help-heading" hidden>
+      <h2 id="help-heading" class="screen-heading">How to play</h2>
+      <div class="help-cards" id="help-cards"></div>
+      <div class="menu-secondary">
+        <button type="button" id="btn-help-back" class="chip-btn">← Back</button>
+      </div>
+    </section>
+  </main>
+
+  <!-- Bottom thumb-zone tray (mobile); mirrors right-rail actions. -->
+  <footer class="tray" id="tray" hidden>
+    <div class="tray-actions" role="group" aria-label="Round actions">
+      <button type="button" id="tray-check" class="act-btn" title="C">Check</button>
+      <button type="button" id="tray-reveal" class="act-btn" title="H">Reveal</button>
+      <button type="button" id="tray-dir" class="act-btn" title="Space">Across ⇄</button>
+      <button type="button" id="tray-pause" class="act-btn" title="Esc">Pause</button>
+    </div>
+  </footer>
+
+  <!-- Pause overlay -->
+  <div id="overlay-pause" class="overlay" role="dialog" aria-modal="true" aria-labelledby="pause-heading" hidden>
+    <div class="overlay-card">
+      <h2 id="pause-heading">Paused</h2>
+      <div class="overlay-actions">
+        <button type="button" id="pause-resume" class="big-btn">Resume</button>
+        <div class="pause-group" role="group" aria-label="Audio">
+          <button type="button" id="pause-mute" class="chip-btn">Mute all</button>
+        </div>
+        <div class="pause-group" role="group" aria-label="Graphics and accessibility">
+          <button type="button" id="pause-quality" class="chip-btn">Cycle quality</button>
+          <button type="button" id="pause-contrast" class="chip-btn">Toggle contrast</button>
+        </div>
+        <div class="pause-group" role="group" aria-label="More">
+          <button type="button" id="pause-help" class="chip-btn">Help</button>
+          <button type="button" id="pause-leave" class="chip-btn act-danger">Leave round</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Toasts + error live region -->
+  <div id="toasts" class="toasts" aria-hidden="true"></div>
+  <p id="error-live" class="visually-hidden" aria-live="assertive"></p>
+</div>
+
+<noscript><p class="noscript">Crossword Journey needs JavaScript to run. The board is fully usable without WebGL.</p></noscript>
+<script type="module" src="/js/main.js"></script>
+</body>
+</html>

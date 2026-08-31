@@ -1,0 +1,74 @@
+[
+  {
+    "name": "key-tap-a",
+    "seconds": 1,
+    "prompt": "A single short mechanical keyboard key press, crisp plastic click with a soft release, close and dry.",
+    "event": "key"
+  },
+  {
+    "name": "key-tap-b",
+    "seconds": 1,
+    "prompt": "A light laptop keyboard key tap, quick muted plastic click, recorded close with no room reverb.",
+    "event": "key"
+  },
+  {
+    "name": "key-tap-c",
+    "seconds": 1,
+    "prompt": "A firm typewriter-style key strike, snappy mechanical clack with a brief spring ping at the end.",
+    "event": "key"
+  },
+  {
+    "name": "correct-letter",
+    "seconds": 1,
+    "prompt": "A small bright xylophone bar struck once with a wooden mallet, cheerful high ding with short resonance.",
+    "event": "correct"
+  },
+  {
+    "name": "word-complete",
+    "seconds": 2,
+    "prompt": "Three ascending marimba notes played with soft mallets, warm wooden chimes rising happily and ringing out briefly.",
+    "event": "word"
+  },
+  {
+    "name": "round-win",
+    "seconds": 3,
+    "prompt": "A short triumphant fanfare of brass and bells, four bright rising notes ending on a held shimmering chord.",
+    "event": "win"
+  },
+  {
+    "name": "round-lose",
+    "seconds": 2,
+    "prompt": "A soft descending wooden flute phrase, three gentle falling notes, sympathetic and calm rather than harsh.",
+    "event": "lose"
+  },
+  {
+    "name": "invalid-buzz",
+    "seconds": 1,
+    "prompt": "A short low electronic error buzz, dull and brief, like a game show wrong-answer tone at low volume.",
+    "event": "invalid"
+  },
+  {
+    "name": "check-mark",
+    "seconds": 1,
+    "prompt": "A single sharp pencil stroke ticking a checkbox on paper, quick scratchy tick with a paper rustle.",
+    "event": "check"
+  },
+  {
+    "name": "reveal-shimmer",
+    "seconds": 2,
+    "prompt": "A soft magical glissando shimmer, like a finger sweeping upward across a small wind chime or bar chimes.",
+    "event": "reveal"
+  },
+  {
+    "name": "select-tick-a",
+    "seconds": 1,
+    "prompt": "A soft UI click, like pressing a small rounded plastic button, quiet and short with a gentle attack.",
+    "event": "select"
+  },
+  {
+    "name": "select-tick-b",
+    "seconds": 1,
+    "prompt": "A gentle fingertip tap on a wooden board, short warm knock with no echo.",
+    "event": "select"
+  }
+]
