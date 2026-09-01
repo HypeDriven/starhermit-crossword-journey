@@ -105,7 +105,10 @@ async function syncTime() {
     const res = await fetch('/api/v1/time');
     const t1 = Date.now();
     if (!res.ok) throw new Error('time ' + res.status);
-    const { now } = await res.json();
+    const body = await res.json();
+    // Hosts expose the epoch under different keys (`now`, `serverTime`, `epochMs`).
+    const now = Number(body.now ?? body.serverTime ?? body.epochMs);
+    if (!Number.isFinite(now)) throw new Error('time shape');
     timeOffset = now - Math.round((t0 + t1) / 2); // round-trip adjusted
     serverOnline = true;
   } catch {
