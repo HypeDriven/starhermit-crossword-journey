@@ -10,9 +10,10 @@ import { readFile, writeFile, mkdir } from 'node:fs/promises';
 import { existsSync, readFileSync } from 'node:fs';
 import { extname, join, normalize, sep } from 'node:path';
 import { replay, compareResults, RULES_VERSION } from './js/rules.js';
+import { dailyForDate, journeyStage, challengeDef, CHALLENGES } from './js/content.js';
 
 const ROOT = new URL('.', import.meta.url).pathname;
-const DATA_DIR = join(ROOT, 'data');
+const DATA_DIR = process.env.CROSSWORD_DATA_DIR || join(ROOT, 'data');
 const BOARD_FILE = join(DATA_DIR, 'leaderboard.json');
 const PORT = Number(process.env.PORT) || 8000;
 const BODY_CAP = 256 * 1024; // bytes
@@ -26,6 +27,11 @@ const MIME = {
   '.json': 'application/json; charset=utf-8',
   '.opus': 'audio/ogg',
   '.txt': 'text/plain; charset=utf-8',
+  '.svg': 'image/svg+xml',
+  '.png': 'image/png',
+  '.ico': 'image/x-icon',
+  '.webp': 'image/webp',
+  '.woff2': 'font/woff2',
 };
 
 // ---------------------------------------------------------------------------
@@ -68,7 +74,13 @@ function insertEntry(boardId, entry) {
   const idx = list.findIndex((e) => e.sessionId === entry.sessionId);
   if (idx >= 0) list.splice(idx, 1);
   list.push(entry);
-  list.sort(compareResults);
+  // Board entries store score as a plain number; compareResults expects the
+  // rules-side result shape ({ status, score: { total }, invalid, ... }).
+  const asResult = (e) => ({
+    status: e.status, score: { total: e.score },
+    invalid: e.invalid, elapsedMs: e.elapsedMs, sessionId: e.sessionId,
+  });
+  list.sort((a, b) => compareResults(asResult(a), asResult(b)));
   const rank = list.indexOf(entry) + 1;
   boards.set(boardId, list.slice(0, 200));
   saveBoards();
@@ -110,7 +122,40 @@ function boardFor(envelope) {
   const id = envelope.init?.id || '';
   if (/^daily-\d{4}-\d{2}-\d{2}$/.test(id)) return id;
   if (envelope.init?.mode === 'journey') return 'journey';
+  if (envelope.init?.mode === 'challenge' && CHALLENGES.some((c) => c.id === id)) return id;
   return 'practice-casual';
+}
+
+// Regenerate the authoritative def for ranked content ids (daily, journey,
+// challenge). Returns null for casual content, which needs no check.
+function expectedDefFor(id) {
+  try {
+    if (/^daily-\d{4}-\d{2}-\d{2}$/.test(id)) return dailyForDate(new Date(id.slice(6) + 'T00:00:00Z'));
+    const j = /^journey-(\d+)$/.exec(id);
+    if (j) {
+      const n = Number(j[1]);
+      if (n >= 1 && n <= 40) return journeyStage(n);
+      return false; // unknown journey page: reject
+    }
+    if (CHALLENGES.some((c) => c.id === id)) return challengeDef(id);
+    return null;
+  } catch {
+    return false; // generator failed: reject rather than trust the claim
+  }
+}
+
+// The submitted initial state must match the authoritative content for its
+// id, otherwise anyone could top a ranked board with a custom trivial grid.
+function contentMatches(init, expected) {
+  const shape = (d) => JSON.stringify({
+    seed: d.seed, mode: d.mode, rows: d.rows, cols: d.cols,
+    cells: d.cells,
+    entries: (d.entries || []).map((e) => [e.dir, e.row, e.col, e.len, e.number, e.cells]),
+    limits: d.limits || {},
+    par: { timeMs: d.par?.timeMs ?? null },
+    mult: d.mult ?? 1,
+  });
+  return !!init && !!expected && shape(init) === shape(expected);
 }
 
 function handleScore(body, res) {
@@ -145,6 +190,12 @@ function handleScore(body, res) {
   }
 
   const boardId = boardFor(envelope);
+  if (boardId !== 'practice-casual') {
+    const expected = expectedDefFor(envelope.init?.id || '');
+    if (!expected || !contentMatches(envelope.init, expected)) {
+      return send(res, 422, { error: 'content-mismatch' });
+    }
+  }
   const entry = {
     name,
     score: final.score.total,
@@ -211,6 +262,7 @@ const server = createServer(async (req, res) => {
 
     // Static files with path traversal protection.
     const rel = p === '/' ? 'index.html' : normalize(p).replace(/^([/\\])+/, '');
+    if (rel.split(/[\\/]/).some(part => part.startsWith('.') || ['data', 'node_modules', 'tests'].includes(part))) return send(res, 403, { error: 'forbidden' });
     const file = join(ROOT, rel);
     if (file !== ROOT && !file.startsWith(ROOT.endsWith(sep) ? ROOT : ROOT + sep)) {
       return send(res, 403, { error: 'forbidden' });

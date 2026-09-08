@@ -644,7 +644,12 @@ setInterval(() => {
   if (cell >= 0) {
     dispatch({ type: 'letter', cell, ch: st.cells[cell].cur });
   } else {
-    cell = st.cells.findIndex((c) => c);
+    // No retypable cell: every filled square is locked. Find any unlocked
+    // (necessarily empty) square and nudge it with a deliberately wrong
+    // letter. A round with all squares locked is already complete, so an
+    // active round always has one — never dispatch into a locked cell, or
+    // the rejection loop would suppress the time-limit loss forever.
+    cell = st.cells.findIndex((c) => c && !R.isLocked(c));
     if (cell >= 0) {
       const sol = st.cells[cell].sol;
       dispatch({ type: 'letter', cell, ch: sol === 'A' ? 'B' : 'A' });
@@ -1008,6 +1013,11 @@ document.addEventListener('keydown', (ev) => {
     typeLetter(ev.key.toUpperCase());
     return;
   }
+  // Enter/Space/Tab keep their native behavior on focused controls outside
+  // the board (clue list, action buttons, tray) so keyboard users can
+  // activate them; the board itself uses them for clue navigation.
+  const onOuterControl = !boardFocused &&
+    !!document.activeElement?.closest?.('button, a, [role="button"]');
   switch (ev.key) {
     case 'Backspace':
     case 'Delete':
@@ -1017,8 +1027,14 @@ document.addEventListener('keydown', (ev) => {
     case 'ArrowLeft': ev.preventDefault(); moveSelection(0, -1); break;
     case 'ArrowRight': ev.preventDefault(); moveSelection(0, 1); break;
     case 'Enter':
-    case 'Tab': ev.preventDefault(); nextEntry(ev.shiftKey ? -1 : 1); break;
-    case ' ': ev.preventDefault(); onCellTap(session.sel.cell); break;
+      if (onOuterControl) return;
+      ev.preventDefault(); nextEntry(ev.shiftKey ? -1 : 1); break;
+    case 'Tab':
+      if (!boardFocused) return; // allow normal focus navigation
+      ev.preventDefault(); nextEntry(ev.shiftKey ? -1 : 1); break;
+    case ' ':
+      if (onOuterControl) return;
+      ev.preventDefault(); onCellTap(session.sel.cell); break;
   }
 });
 

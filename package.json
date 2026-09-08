@@ -1,14 +1,19 @@
 {
   "name": "crossword-journey",
   "version": "1.0.0",
-  "description": "Crossword Journey — solve clue-driven intersecting words across a travel journal of scenic dioramas.",
+  "description": "Crossword Journey \u2014 solve clue-driven intersecting words across a travel journal of scenic dioramas.",
   "type": "module",
   "scripts": {
     "start": "node server.js",
     "test": "node --test tests/*.test.mjs",
-    "smoke": "node tools/smoke.mjs"
+    "smoke": "node tools/smoke.mjs",
+    "test:e2e": "node tests/e2e.mjs"
   },
   "engines": {
     "node": ">=18"
-  }
+  },
+  "devDependencies": {
+    "playwright-core": "^1.62.1"
+  },
+  "license": "PolyForm-Noncommercial-1.0.0"
 }
