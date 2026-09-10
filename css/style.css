@@ -104,6 +104,16 @@ p, li, .menu-card-sub, .clue { max-width: 70ch; }
 .screen-heading { font-size: 1.6rem; color: var(--paper); text-align: center; max-width: 70ch; text-shadow: 0 1px 10px rgba(10, 14, 22, 0.65); }
 .lede { color: #cdd6e4; text-align: center; text-shadow: 0 1px 8px rgba(10, 14, 22, 0.6); }
 
+/* Title key art (assets/key-art.webp); hides itself if the file fails to load. */
+.title-art {
+  display: block; width: min(560px, 100%); height: auto; aspect-ratio: 16 / 9;
+  border-radius: 14px; object-fit: cover;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.45);
+}
+.title-art[hidden] { display: none; }
+@media (max-height: 640px) { .title-art { width: min(360px, 100%); } }
+@media (max-height: 500px) and (orientation: landscape) { .title-art { display: none; } }
+
 .menu-primary { display: flex; gap: 12px; }
 .big-btn {
   min-height: 56px; min-width: 160px; padding: 12px 28px;
@@ -249,6 +259,11 @@ body.left-handed .screen-play { flex-direction: row-reverse; }
   background: var(--panel); border-radius: 14px; padding: 20px 24px;
   width: min(560px, 100%);
 }
+.results-art {
+  display: block; width: 100%; height: auto; aspect-ratio: 16 / 9; max-height: 32vh;
+  object-fit: cover; border-radius: 10px; margin-bottom: 14px;
+}
+.results-art[hidden] { display: none; }
 .results-headline { font-size: 1.5rem; font-weight: 800; color: var(--accent); margin-bottom: 12px; }
 .breakdown { display: grid; grid-template-columns: 1fr auto; gap: 4px 16px; }
 .breakdown dt { color: var(--muted); }

@@ -16,3 +16,8 @@ Generated with MOSS-SoundEffect v2.0, 48 kHz mono Opus (96 kbps VBR, loudness-no
 | reveal-shimmer.opus | reveal | A soft magical glissando shimmer, like a finger sweeping upward across a small wind chime or bar chimes. |
 | select-tick-a.opus | select | A soft UI click, like pressing a small rounded plastic button, quiet and short with a gentle attack. |
 | select-tick-b.opus | select | A gentle fingertip tap on a wooden board, short warm knock with no echo. |
+| page-turn.opus | pageTurn | A single sheet of thick journal paper being turned over, a soft crisp paper flip with a light rustle, close-miked and dry with no room reverb. |
+| book-close.opus | pause | A small hardcover travel journal being closed gently, one soft padded thump of the leather cover meeting paper, quiet, warm and close. |
+| passport-stamp.opus | achievement | A rubber stamp pressed firmly once onto a passport page, a solid wooden thud with a brief damp ink squelch, close and dry. |
+| time-warning.opus | timeWarning | A small brass pocket watch ticking quickly three times, then a single soft bell chime, urgent but gentle, recorded close. |
+| pencil-flourish.opus | lesson | A pencil drawing a quick swooping flourish across paper, a short graphite scribble ending in a light tap, close-miked. |

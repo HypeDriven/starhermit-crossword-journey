@@ -569,6 +569,7 @@ function makeDef(base) {
     mode: base.mode,
     theme: base.theme,
     pattern: base.pattern,
+    maxDifficulty: base.maxDifficulty ?? 3,
     rows: grid.rows,
     cols: grid.cols,
     cells: grid.cells,

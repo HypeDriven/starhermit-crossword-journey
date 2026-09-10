@@ -70,5 +70,35 @@
     "seconds": 1,
     "prompt": "A gentle fingertip tap on a wooden board, short warm knock with no echo.",
     "event": "select"
+  },
+  {
+    "name": "page-turn",
+    "seconds": 2,
+    "prompt": "A single sheet of thick journal paper being turned over, a soft crisp paper flip with a light rustle, close-miked and dry with no room reverb.",
+    "event": "pageTurn"
+  },
+  {
+    "name": "book-close",
+    "seconds": 2,
+    "prompt": "A small hardcover travel journal being closed gently, one soft padded thump of the leather cover meeting paper, quiet, warm and close.",
+    "event": "pause"
+  },
+  {
+    "name": "passport-stamp",
+    "seconds": 1,
+    "prompt": "A rubber stamp pressed firmly once onto a passport page, a solid wooden thud with a brief damp ink squelch, close and dry.",
+    "event": "achievement"
+  },
+  {
+    "name": "time-warning",
+    "seconds": 2,
+    "prompt": "A small brass pocket watch ticking quickly three times, then a single soft bell chime, urgent but gentle, recorded close.",
+    "event": "timeWarning"
+  },
+  {
+    "name": "pencil-flourish",
+    "seconds": 2,
+    "prompt": "A pencil drawing a quick swooping flourish across paper, a short graphite scribble ending in a light tap, close-miked.",
+    "event": "lesson"
   }
 ]

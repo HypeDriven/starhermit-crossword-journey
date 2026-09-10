@@ -37,6 +37,7 @@ const MIME = {
   '.json': 'application/json; charset=utf-8',
   '.svg': 'image/svg+xml',
   '.png': 'image/png',
+  '.webp': 'image/webp',
   '.ico': 'image/x-icon',
   '.wav': 'audio/wav',
   '.mp3': 'audio/mpeg',
@@ -74,7 +75,8 @@ const server = createServer(async (req, res) => {
     res.writeHead(404); res.end('not found');
   }
 });
-await new Promise((r) => server.listen(0, '127.0.0.1', r));
+// PORT env pins the embedded server's port (default: any free port).
+await new Promise((r) => server.listen(Number(process.env.PORT) || 0, '127.0.0.1', r));
 const BASE = `http://127.0.0.1:${server.address().port}`;
 
 // Journey page 1 solution (deterministic authored content), entry order,

@@ -60,6 +60,16 @@ const EFFECTS = {
   check: (b) => blip(b, { freq: 740, dur: 0.07, type: 'square', gain: 0.18 }),
   reveal: (b) => blip(b, { freq: 980, dur: 0.18, type: 'sine', gain: 0.3, slide: 220 }),
   select: (b) => blip(b, { freq: 340, dur: 0.04, gain: 0.18 }),
+  // Round start / page turn: soft filtered noise-like sweep.
+  pageTurn: (b) => blip(b, { freq: 220, dur: 0.18, type: 'triangle', gain: 0.16, slide: 260 }),
+  // Pause: low soft thud (journal closing).
+  pause: (b) => blip(b, { freq: 160, dur: 0.16, type: 'sine', gain: 0.28, slide: -90 }),
+  // Achievement: stamp thud plus bright tail.
+  achievement: (b) => { blip(b, { freq: 120, dur: 0.12, type: 'sine', gain: 0.32 }); setTimeout(() => blip(b, { freq: 1046, dur: 0.2, gain: 0.22 }), 60); },
+  // Time warning: three quick ticks then a bell.
+  timeWarning: (b) => { [0, 90, 180].forEach((t) => setTimeout(() => blip(b, { freq: 900, dur: 0.04, type: 'square', gain: 0.16 }), t)); setTimeout(() => blip(b, { freq: 1318, dur: 0.35, type: 'sine', gain: 0.24 }), 300); },
+  // Lesson complete: quick rising flourish.
+  lesson: (b) => blip(b, { freq: 440, dur: 0.16, type: 'triangle', gain: 0.22, slide: 400 }),
 };
 
 // --- Sampled one-shots --------------------------------------------------------
@@ -81,6 +91,11 @@ const SFX_EVENTS = {
   'reveal-shimmer': 'reveal',
   'select-tick-a': 'select',
   'select-tick-b': 'select',
+  'page-turn': 'pageTurn',
+  'book-close': 'pause',
+  'passport-stamp': 'achievement',
+  'time-warning': 'timeWarning',
+  'pencil-flourish': 'lesson',
 };
 
 const EVENT_SAMPLES = {}; // event name -> [clip basenames]

@@ -150,6 +150,7 @@ function toast(msg) {
   el.className = 'toast';
   el.textContent = msg;
   box.appendChild(el);
+  while (box.children.length > 3) box.firstElementChild.remove(); // never pile over the screen
   setTimeout(() => el.remove(), 4200);
 }
 
@@ -172,6 +173,7 @@ function unlockAchievement(id) {
   if (!ACHIEVEMENTS[id] || store.achievements[id]) return;
   store.achievements[id] = Date.now();
   saveStore();
+  audio.play('achievement');
   toast(`Achievement unlocked: ${ACHIEVEMENTS[id].name}`);
   session.newAchievements.push(id);
 }
@@ -362,6 +364,7 @@ const session = {
   newAchievements: [],
   roundMechanics: new Set(),
   tutorialStep: 0,
+  timeWarned: false, // one-shot 30-second warning in timed rounds
 };
 
 const active = () => session.phase === 'active';
@@ -427,6 +430,7 @@ function startRound(def, { tutorial = false } = {}) {
   session.newAchievements = [];
   session.roundMechanics = new Set();
   session.tutorialStep = 0;
+  session.timeWarned = false;
   session.accruedMs = 0;
   session.startStamp = performance.now();
   decoSeed = def.seed;
@@ -438,6 +442,7 @@ function startRound(def, { tutorial = false } = {}) {
   if (tutorial) setupTutorial();
   else $('tutorial-banner').hidden = true;
   transition('active', 'round-start');
+  audio.play('pageTurn');
   announceObjective(objectiveText());
   announceBoardSummary();
 }
@@ -662,6 +667,18 @@ setInterval(() => {
 setInterval(() => {
   if (!session.def || (session.phase !== 'active' && session.phase !== 'paused')) return;
   $('hud-timer').textContent = fmtTime(elapsed());
+  // One-shot warning with 30 s left on a time-limited round (sound + text cue).
+  const lim = session.state?.limits.timeMs;
+  if (active() && lim && !session.timeWarned) {
+    const left = lim - elapsed();
+    if (left > 0 && left <= 30000) {
+      session.timeWarned = true;
+      audio.play('timeWarning');
+      haptic(40);
+      toast('30 seconds left!');
+      announceError('30 seconds left.');
+    }
+  }
 }, 250);
 
 // ---------------------------------------------------------------------------
@@ -1046,6 +1063,7 @@ document.addEventListener('visibilitychange', () => {
 function pauseRound(reason = 'user') {
   if (session.phase !== 'active') return;
   session.accruedMs = elapsed();
+  if (reason === 'user') audio.play('pause');
   transition('paused', reason);
 }
 
@@ -1118,7 +1136,7 @@ function advanceTutorial(events) {
     if (session.tutorialStep < tut.steps.length) {
       showTutorialStep();
       toast('Lesson complete!');
-      audio.play('word');
+      audio.play('lesson');
     } else {
       store.tutorialDone = true;
       saveStore();
@@ -1328,6 +1346,11 @@ function renderResults(validEnvelope) {
     'gave-up': 'You gave up.',
   };
   $('results-headline').textContent = won ? `✦ ${reasons[st.terminalReason]}` : reasons[st.terminalReason];
+  const art = $('results-art');
+  if (art) {
+    art.hidden = false;
+    art.src = won ? 'assets/results-win.webp' : 'assets/results-lose.webp';
+  }
   $('results-live').textContent =
     `${won ? 'Won' : 'Lost'}: ${d.name}. Score ${st.score.total}. ` +
     `${st.filledCorrect} of ${st.filledTotal} letters correct.`;

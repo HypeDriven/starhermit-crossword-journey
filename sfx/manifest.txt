@@ -1,0 +1,20 @@
+# Crossword Journey — canonical SFX manifest.
+# file | event id (js/audio.js SFX_EVENTS) | description of the sound | usage context
+# All clips: MOSS-SoundEffect v2.0, 48 kHz mono Opus 96 kbps, loudness-normalized (-20 LUFS). Several files may back one event as random variants.
+key-tap-a.opus | key | A single short mechanical keyboard key press, crisp plastic click with a soft release, close and dry. | Letter typed into a square that is not (yet) correct (main.js handleEvents 'letter', correct=false). Variant A.
+key-tap-b.opus | key | A light laptop keyboard key tap, quick muted plastic click, no room reverb. | Same as key-tap-a. Variant B.
+key-tap-c.opus | key | A firm typewriter-style key strike, snappy mechanical clack with a brief spring ping. | Same as key-tap-a. Variant C.
+correct-letter.opus | correct | A small bright xylophone bar struck once with a wooden mallet, cheerful high ding, short resonance. | Letter typed that matches the solution (handleEvents 'letter', correct=true); also the Effects-volume slider preview.
+word-complete.opus | word | Three ascending marimba notes with soft mallets, warm wooden chimes rising and ringing briefly. | An across/down entry becomes fully correct (rules event 'word'); streak toast shows at the same time.
+round-win.opus | win | A short triumphant fanfare of brass and bells, four bright rising notes ending on a held shimmering chord. | Grid complete (rules event 'win', terminalReason grid-complete) just before the results screen.
+round-lose.opus | lose | A soft descending wooden flute phrase, three gentle falling notes, sympathetic and calm. | Round lost: time-limit, mistake-limit or gave-up (rules event 'lose').
+invalid-buzz.opus | invalid | A short low electronic error buzz, dull and brief, like a quiet game-show wrong-answer tone. | Any rejected command (handleInvalid): locked cell, nothing to clear, check limit, etc. Paired with a 30 ms haptic and an assertive text announcement.
+check-mark.opus | check | A single sharp pencil stroke ticking a checkbox on paper, quick scratchy tick with a paper rustle. | Check word / Check grid resolved (rules event 'check'), regardless of how many letters were wrong.
+reveal-shimmer.opus | reveal | A soft magical glissando shimmer, a finger sweeping upward across bar chimes. | Reveal letter hint wrote a solution letter (rules event 'reveal').
+select-tick-a.opus | select | A soft UI click, like pressing a small rounded plastic button, quiet and short. | Square tapped/selected or direction toggled (onCellTap), clue chosen from the clue list. Variant A.
+select-tick-b.opus | select | A gentle fingertip tap on a wooden board, short warm knock, no echo. | Same as select-tick-a. Variant B.
+page-turn.opus | pageTurn | A single sheet of thick journal paper being turned over, a soft crisp paper flip with a light rustle, close and dry. | Round start (startRound), every mode: the journal opens to a new page.
+book-close.opus | pause | A small hardcover travel journal being closed gently, one soft padded thump of leather cover meeting paper. | Player-initiated pause (Esc, Pause buttons, opening Help/Settings mid-round). Not played for the hidden-tab auto-pause.
+passport-stamp.opus | achievement | A rubber stamp pressed firmly once onto a passport page, a solid wooden thud with a brief ink squelch. | Achievement unlocked (unlockAchievement) — plays with the toast; the badge repeats on the results screen.
+time-warning.opus | timeWarning | A small brass pocket watch ticking quickly three times, then a single soft bell chime, urgent but gentle. | One-shot at 30 s remaining in a time-limited round (Speed Ink, Summit Push), with a toast, haptic and live-region text.
+pencil-flourish.opus | lesson | A pencil drawing a quick swooping flourish across paper, a short graphite scribble ending in a light tap. | Learn mode: a tutorial lesson step is satisfied and the next lesson banner appears (advanceTutorial).
