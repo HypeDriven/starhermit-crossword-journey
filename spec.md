@@ -199,10 +199,10 @@ Manifest: `name=Crossword Journey`, `launch=index.html`, `server=server.js`, `co
 |---|---|
 | Server script (`server.js`) | **Used.** Same-origin `/api/v1/time` (round-trip-adjusted offset drives the UTC day and Daily seed; refreshed every 5 minutes), `/api/v1/score` (authoritative replay of the command log, claimed score/status must match, content regenerated from id for ranked boards, idempotent per `sessionId`, 256 KB body cap), `/api/v1/leaderboard?board=` (top 20). Boards: `daily-YYYY-MM-DD`, `journey`, each challenge id, `practice-casual`. Static serving refuses dotfiles, `data/`, `node_modules/`, `tests/`. |
 | Sessions / offline | The round runs locally; the score is posted only after the local replay verifies. Offline shows "offline · date UTC" in the top bar, uses the local clock, and reports "Score not submitted (offline)". |
-| Identity / profile | **Not used.** Display name is a local setting ("Guest" default) sent with the score. |
+| Identity / profile | **Used when hosted.** `js/platform.js` reads `#game_token=<jwt>` from the URL fragment (stripped after the read; query forms for local dev), decodes `sub` + `game_scope` (never hard-coded), sends it as `Authorization: Bearer` on every hosted call, and re-mints it every 45 min via `POST /api/v1/games/{slug}/launch-token` (60 s retry). The top bar shows "<nickname> · sync status · day UTC" from `GET /api/v1/users/{sub}/profile` (never usernames, never `/api/v1/me`; `Player <id8>` fallback); score submissions carry the account nickname + id. Offline keeps the local "Guest" name and the online/offline status. |
 | Presence, invitations, realtime rooms, chat, voice | **Not used** — solo ruleset. |
 | Achievements | Local, in `localStorage` (`cwj:v1`), not published to the platform. |
-| Cloud save | **Not used**; progression is local (`journey.unlocked`, `stars`, `stats`, `achievements`, `tutorialDone`, settings). |
+| Cloud save | **Used when hosted**: the store document mirrors to one zip+base64 slot at `GET/PUT /api/v1/me/cloud-saves/{slug}` — remote wins on boot (version-validated), saves debounce 2 s and flush on `pagehide`/hidden with keepalive, and the top bar reflects sync status. localStorage stays the offline cache. |
 
 ## 13. Technical architecture
 
@@ -242,7 +242,7 @@ QA bar (checkable): the first-time player is taught by Learn's banners or can re
 
 - No localization; English only (§10).
 - Mobile letter entry relies on a hardware/Bluetooth keyboard or the browser's key events: cells are `<button>`s, so the on-screen keyboard does not open on tap. Assists and navigation work by touch; typing does not on a phone without a keyboard.
-- Leaderboards are write-only in the client: results show the rank returned by `/api/v1/score`, but there is no screen that reads `/api/v1/leaderboard`.
+- The own-server `/api/v1/leaderboard` is still never read; ranked results show the submit rank, and when hosted the platform board (read via `GET /api/v1/games/{slug}` → leaderboardId → entries, nicknames resolved) renders its top 3 on the results screen.
 - `assists.undo` in content defs is unused; there is no undo command (Backspace clears).
 - Journey wins post to a single shared `journey` board regardless of page, so a page-40 score and a page-1 score compete.
 - Achievements and journey progress live only in the browser's localStorage; clearing site data resets them.
@@ -254,7 +254,7 @@ QA bar (checkable): the first-time player is taught by Learn's banners or can re
 ## 17. Design intent not yet implemented
 
 - Localized string tables and per-locale word banks for en-US, en-GB, es-419, es-ES, de-DE, fr-FR, fr-CA, pt-BR, it-IT, with the language chosen from `navigator.languages` and overridable in Settings.
-- A Leaderboard screen (global and friends-filtered) reading `/api/v1/leaderboard` for the Daily, each challenge and Journey per page.
+- A Leaderboard screen (global and friends-filtered) reading the own-server `/api/v1/leaderboard` for the Daily, each challenge and Journey per page, beyond the platform board snippet.
 - Tap-to-type on touch devices via a hidden focused text input or an on-screen letter tray.
-- Platform identity, presence heartbeats, cloud-saved progression and platform-published achievements through the StarHermit API.
+- Presence heartbeats and platform-published achievements through the StarHermit API (identity and cloud-saved progression are done).
 - Authored per-theme ambience loops (harbor gulls and water, pine wind, desert wind, frost hush, orchard rail) on the ambience bus.

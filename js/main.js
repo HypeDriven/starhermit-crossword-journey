@@ -12,6 +12,7 @@ import * as THREE from '../vendor/three.module.js';
 import * as R from './rules.js';
 import * as C from './content.js';
 import { audio } from './audio.js';
+import { platform } from './platform.js';
 
 const $ = (id) => document.getElementById(id);
 const clamp = (v, lo, hi) => Math.max(lo, Math.min(hi, v));
@@ -59,6 +60,10 @@ try {
 function saveStore() {
   try { localStorage.setItem(STORE_KEY, JSON.stringify(store)); }
   catch { /* storage full/blocked: non-fatal */ }
+  // Mirror the store document to the platform cloud slot when hosted.
+  try {
+    if (platform.hosted) platform.saveCloud(JSON.stringify(store));
+  } catch { /* mirror errors never break saves */ }
 }
 
 // ---------------------------------------------------------------------------
@@ -102,7 +107,7 @@ let serverOnline = false;
 async function syncTime() {
   try {
     const t0 = Date.now();
-    const res = await fetch('/api/v1/time');
+    const res = await fetch('/api/v1/time', { headers: platform.headers() });
     const t1 = Date.now();
     if (!res.ok) throw new Error('time ' + res.status);
     const body = await res.json();
@@ -123,6 +128,14 @@ function updateTopbarStatus() {
   const el = $('topbar-status');
   if (!el) return;
   const day = new Date(serverNow()).toISOString().slice(0, 10);
+  if (platform.hosted) {
+    const name = platform.profile ? platform.profile.name : '…';
+    const syncTxt = platform.sync === 'synced' ? 'progress synced'
+      : platform.sync === 'saving' ? 'saving…'
+      : 'cloud sync unavailable';
+    el.textContent = `${name} · ${syncTxt} · ${day} UTC`;
+    return;
+  }
   el.textContent = `${serverOnline ? 'online' : 'offline'} · ${day} UTC`;
 }
 
@@ -130,8 +143,14 @@ async function postScore(envelope, result) {
   try {
     const res = await fetch('/api/v1/score', {
       method: 'POST',
-      headers: { 'content-type': 'application/json' },
-      body: JSON.stringify({ envelope, result }),
+      headers: platform.headers({ 'content-type': 'application/json' }),
+      body: JSON.stringify({
+        envelope,
+        result: Object.assign({}, result, {
+          name: platform.hosted && platform.profile ? platform.profile.name : result.name,
+          playerId: platform.hosted ? platform.userId : undefined,
+        }),
+      }),
     });
     const data = await res.json();
     return res.ok ? { ok: true, ...data } : { ok: false, error: data.error || 'rejected' };
@@ -1409,6 +1428,14 @@ function renderResults(validEnvelope) {
       if (r.ok) $('results-rank').textContent = `Leaderboard “${r.board}”: rank #${r.rank}`;
       else $('results-rank').textContent = `Score not submitted (${r.error}).`;
     });
+    // Platform board (read-only): top entries with nicknames when hosted.
+    if (platform.hosted) {
+      platform.fetchLeaderboard().then((entries) => {
+        if (!entries || !entries.length) return;
+        const top = entries.slice(0, 3).map((e, i) => `#${i + 1} ${e.name} ${e.score}`).join(' · ');
+        $('results-rank').textContent += ` Platform board: ${top}.`;
+      }).catch(() => {});
+    }
   } else {
     $('results-rank').textContent = 'Score not submitted (verification failed).';
   }
@@ -1624,6 +1651,27 @@ function wireMenus() {
 }
 
 function init() {
+  // Platform handshake first: token read, then the remote save (when hosted)
+  // wins over the local cache before anything renders.
+  try { platform.init(); } catch { /* offline */ }
+  if (platform.hosted) {
+    platform.onSync(updateTopbarStatus);
+    platform.fetchProfile().then(updateTopbarStatus).catch(() => {});
+    platform.loadCloud().then((remoteRaw) => {
+      if (!remoteRaw) return;
+      try {
+        const parsed = JSON.parse(remoteRaw);
+        if (parsed && parsed.v === 1) {
+          store = { ...structuredClone(DEFAULT_STORE), ...parsed,
+            settings: { ...DEFAULT_STORE.settings, ...(parsed.settings || {}) } };
+          saveStore(); // local cache mirrors the remote doc
+          applySettings();
+          refreshTitle();
+        }
+      } catch { /* corrupt remote: keep local */ }
+      updateTopbarStatus();
+    }).catch(() => {});
+  }
   applySettings();
   wireMenus();
   wireSettings();
