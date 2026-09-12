@@ -386,3 +386,39 @@ body.reduced-motion * { animation: none !important; transition: none !important;
 @media (min-width: 1024px) {
   .tray { display: none !important; }
 }
+
+/* --- On-screen letter keyboard (touch entry) ------------------------------------*/
+.osk { display: flex; flex-direction: column; gap: 4px; margin-bottom: 6px; }
+.osk[hidden] { display: none; }
+.osk-row { display: flex; justify-content: center; gap: 4px; }
+.osk-key {
+  flex: 0 1 44px; min-width: 30px; min-height: 40px; padding: 0;
+  border-radius: 6px; border: 1px solid var(--tile-edge); background: var(--paper, #fff);
+  color: var(--ink); font-weight: 700; font-size: 1rem; cursor: pointer;
+}
+.osk-key.osk-wide { flex-basis: 64px; }
+.osk-key:active { background: var(--accent); }
+@media (max-height: 500px) and (orientation: landscape) {
+  .osk-key { min-height: 32px; flex-basis: 34px; font-size: 0.9rem; }
+  .osk { gap: 2px; margin-bottom: 4px; }
+}
+
+/* Current clue beside the board on compact layouts (rails are drawers there) */
+.board-clue { display: none; margin: 0 0 6px; font-weight: 600; text-align: center; max-width: 92vw; }
+@media (max-width: 1023px) {
+  .board-clue { display: block; }
+  .rail-right .rail-block:first-child { display: none; }
+}
+@media (max-height: 500px) and (orientation: landscape) {
+  .board-clue { font-size: 0.9rem; }
+  /* the tray (letters + actions) docks on the right so the board keeps the full height */
+  .screen-play { padding-right: calc(400px + var(--sar)); flex-direction: column; }
+  .tray { position: fixed; right: 0; top: 52px; bottom: 0; width: calc(400px + var(--sar)); box-sizing: border-box;
+          display: flex; flex-direction: column; justify-content: flex-end; padding-top: 8px; box-shadow: -2px 0 10px rgba(0,0,0,0.25); }
+  .tray-actions { flex-wrap: wrap; }
+  .tray-actions .act-btn { flex: 1 1 30%; min-height: 40px; padding: 4px; font-size: 0.85rem; }
+  .board-region { min-height: 0; }
+  #board { max-height: calc(100vh - 120px) !important; max-width: calc(100vh - 120px) !important; }
+  .cell { min-width: 32px; min-height: 32px; }
+  .rail { width: auto; }
+}

@@ -152,8 +152,8 @@ async function postScore(envelope, result) {
         }),
       }),
     });
-    const data = await res.json();
-    return res.ok ? { ok: true, ...data } : { ok: false, error: data.error || 'rejected' };
+    const data = await res.json().catch(() => ({}));
+    return res.ok ? { ok: true, ...data } : { ok: false, error: data.error || `HTTP ${res.status}` };
   } catch {
     return { ok: false, error: 'offline' };
   }
@@ -836,6 +836,9 @@ function markSelectedCells() {
   } else {
     clueEl.textContent = 'Select a square to begin.';
   }
+  // Compact layouts keep the current clue beside the board (rails are drawers).
+  const boardClue = $('board-clue');
+  if (boardClue) boardClue.textContent = clueEl.textContent;
 }
 
 function updateSelection() { markSelectedCells(); }
@@ -1418,7 +1421,10 @@ function renderResults(validEnvelope) {
 
   // Submit when the local replay verified.
   $('results-rank').textContent = '';
-  if (validEnvelope) {
+  if (validEnvelope && !session.def.ranked) {
+    // Unranked rounds (lessons, casual) never go to a shared board.
+    $('results-rank').textContent = 'Unranked round — result saved on this device.';
+  } else if (validEnvelope) {
     postScore(validEnvelope, {
       name: store.profile.name,
       sessionId: session.sessionId,
@@ -1426,7 +1432,8 @@ function renderResults(validEnvelope) {
       status: st.status,
     }).then((r) => {
       if (r.ok) $('results-rank').textContent = `Leaderboard “${r.board}”: rank #${r.rank}`;
-      else $('results-rank').textContent = `Score not submitted (${r.error}).`;
+      else if (r.error === 'offline') $('results-rank').textContent = 'Score not submitted — you appear to be offline. Result saved on this device.';
+      else $('results-rank').textContent = `Score board unavailable (${r.error}) — result saved on this device.`;
     });
     // Platform board (read-only): top entries with nicknames when hosted.
     if (platform.hosted) {
@@ -1581,6 +1588,47 @@ function wirePause() {
   });
 }
 
+// On-screen keyboard: touch players type through the same letter/clear path
+// as a hardware keyboard. Shown by default on coarse pointers; the ABC tray
+// button toggles it either way.
+function wireOsk() {
+  const osk = $('osk');
+  const toggle = $('tray-keys');
+  if (!osk || !toggle) return;
+  const rows = ['QWERTYUIOP', 'ASDFGHJKL', 'ZXCVBNM⌫'];
+  for (const row of rows) {
+    const div = document.createElement('div');
+    div.className = 'osk-row';
+    for (const ch of row) {
+      const b = document.createElement('button');
+      b.type = 'button';
+      b.className = 'osk-key' + (ch === '⌫' ? ' osk-wide' : '');
+      b.textContent = ch;
+      b.setAttribute('aria-label', ch === '⌫' ? 'Backspace' : ch);
+      b.addEventListener('click', () => {
+        if (!active()) return;
+        audio.unlock();
+        if (ch === '⌫') clearCell(); else typeLetter(ch);
+      });
+      div.appendChild(b);
+    }
+    osk.appendChild(div);
+  }
+  const coarse = window.matchMedia('(pointer: coarse)').matches;
+  let shown = store.settings.osk ?? coarse;
+  const apply = () => {
+    osk.hidden = !shown;
+    toggle.setAttribute('aria-pressed', String(shown));
+  };
+  toggle.addEventListener('click', () => {
+    shown = !shown;
+    store.settings.osk = shown;
+    saveStore();
+    apply();
+  });
+  apply();
+}
+
 // Compact-layout drawers: rails collapse behind a toggle on narrow screens.
 function wireDrawers() {
   for (const rail of document.querySelectorAll('.rail')) {
@@ -1627,12 +1675,14 @@ function wireMenus() {
     subReturnPhase = session.phase === 'active' ? 'active' : session.phase === 'results' ? 'results' : 'title';
     if (session.phase === 'active') pauseRound();
     subReturnPhase = session.phase === 'paused' ? 'paused' : subReturnPhase;
+    if (session.phase === 'paused') $('overlay-pause').hidden = true; // paused state stays; the modal yields to the sub-screen
     showScreen('screen-help');
   });
   $('nav-settings').addEventListener('click', () => {
     subReturnPhase = session.phase === 'active' ? 'active' : session.phase === 'results' ? 'results' : 'title';
     if (session.phase === 'active') pauseRound();
     subReturnPhase = session.phase === 'paused' ? 'paused' : subReturnPhase;
+    if (session.phase === 'paused') $('overlay-pause').hidden = true;
     openSettingsFromForm();
     showScreen('screen-settings');
   });
@@ -1677,6 +1727,7 @@ function init() {
   wireSettings();
   wirePause();
   wireDrawers();
+  wireOsk();
   buildHelpCards();
   initThree();
   syncTime();

@@ -91,6 +91,7 @@
       <!-- Center: board -->
       <div class="board-region" id="board-region">
         <p id="board-summary" class="visually-hidden" aria-live="polite"></p>
+        <p id="board-clue" class="board-clue" aria-hidden="true"></p>
         <div id="board" class="board" role="grid" aria-label="Crossword grid" tabindex="-1"></div>
         <p id="tutorial-banner" class="tutorial-banner" hidden></p>
       </div>
@@ -185,7 +186,10 @@
 
   <!-- Bottom thumb-zone tray (mobile); mirrors right-rail actions. -->
   <footer class="tray" id="tray" hidden>
+    <!-- On-screen letters for touch play; hidden while a hardware keyboard is the likely input. -->
+    <div class="osk" id="osk" role="group" aria-label="Letter keyboard"></div>
     <div class="tray-actions" role="group" aria-label="Round actions">
+      <button type="button" id="tray-keys" class="act-btn" aria-pressed="true" aria-controls="osk">ABC</button>
       <button type="button" id="tray-check" class="act-btn" title="C">Check</button>
       <button type="button" id="tray-reveal" class="act-btn" title="H">Reveal</button>
       <button type="button" id="tray-dir" class="act-btn" title="Space">Across ⇄</button>
