@@ -2,7 +2,8 @@
  * Crossword Journey — end-to-end QA playthrough (dev only, not shipped).
  *
  * Drives the real visible UI in headless Chrome via playwright-core:
- *   title → settings open/close → help open/close → Play → Journey →
+ *   title → settings open/close → Graphics presets/override/reload →
+ *   help open/close → Play → Journey →
  *   page 1 → type letters, check word, reveal letter → pause/resume →
  *   solve the grid to the results screen → back home.
  *
@@ -123,7 +124,7 @@ async function runPass(vpName, viewport, hasTouch) {
   const errors = [];
   page.on('pageerror', (e) => errors.push(`pageerror: ${e.message}`));
   page.on('console', (m) => {
-    if (m.type() === 'error' && !browserNoise.test(m.text())) errors.push(`console: ${m.text()}`);
+    if ((m.type() === 'error' || m.type() === 'warning') && !browserNoise.test(m.text())) errors.push(`console ${m.type()}: ${m.text()}`);
   });
   // Desktop shows the right-rail action buttons; mobile collapses the rails
   // and mirrors the same actions in the bottom tray.
@@ -146,6 +147,47 @@ async function runPass(vpName, viewport, hasTouch) {
         throw new Error('high-contrast setting did not apply');
       }
       await page.screenshot({ path: SHOT('settings', vpName) });
+      await page.click('#btn-settings-back');
+      await page.waitForSelector('#screen-title:not([hidden])');
+    });
+
+    await step(`[${vpName}] graphics: presets, override, persistence`, async () => {
+      const preset = () => page.evaluate(() => document.body.dataset.gfxPreset);
+      await page.waitForSelector('body[data-gfx-ready="true"]', { timeout: 15000 });
+      // Headless Chrome runs on a software GPU: Auto resolves to Low.
+      if ((await preset()) !== 'low') throw new Error(`auto should resolve to low, got ${await preset()}`);
+      await page.click('#nav-settings');
+      await page.waitForSelector('#screen-settings:not([hidden])');
+      await page.locator('#set-quality').scrollIntoViewIfNeeded();
+      await page.selectOption('#set-quality', 'high');
+      await page.waitForSelector('body[data-gfx-preset="high"][data-gfx-post="on"]');
+      await page.waitForTimeout(400); // a few post-processed frames
+      if (vpName === 'desktop') {
+        await page.selectOption('#set-quality', 'ultra');
+        await page.waitForSelector('body[data-gfx-preset="ultra"][data-gfx-shadows="high"]');
+        await page.waitForTimeout(400);
+      }
+      await page.selectOption('#set-quality', 'low');
+      await page.waitForSelector('body[data-gfx-preset="low"][data-gfx-post="off"]');
+      await page.selectOption('#set-quality', 'high');
+      await page.waitForSelector('body[data-gfx-preset="high"]');
+      const bloom = page.locator('#gfx-bloom');
+      await bloom.scrollIntoViewIfNeeded();
+      await bloom.selectOption('off');
+      await page.waitForSelector('body[data-gfx-bloom="off"]');
+      const summary = await page.textContent('#gfx-summary');
+      if (!/px/.test(summary)) throw new Error(`summary missing: ${summary}`);
+      await page.screenshot({ path: SHOT('graphics', vpName) });
+      await page.reload({ waitUntil: 'load' });
+      await page.waitForSelector('body[data-gfx-ready="true"]', { timeout: 15000 });
+      const after = await page.evaluate(() => ({ p: document.body.dataset.gfxPreset, b: document.body.dataset.gfxBloom }));
+      if (after.p !== 'high' || after.b !== 'off') throw new Error(`graphics not persisted: ${JSON.stringify(after)}`);
+      // Choosing a preset clears overrides; back to Auto keeps the rest of the run fast.
+      await page.click('#nav-settings');
+      await page.waitForSelector('#screen-settings:not([hidden])');
+      await page.selectOption('#set-quality', 'auto');
+      await page.waitForSelector('body[data-gfx-preset="low"][data-gfx-auto="true"]');
+      if ((await page.inputValue('#gfx-bloom')) !== 'preset') throw new Error('preset did not clear the bloom override');
       await page.click('#btn-settings-back');
       await page.waitForSelector('#screen-title:not([hidden])');
     });

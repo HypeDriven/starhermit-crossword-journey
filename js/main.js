@@ -8,11 +8,12 @@
 //    command ids; the full ordered log is kept for the replay envelope.
 //  - The DOM board is the accessible truth; the Three.js diorama is purely
 //    decorative and never intercepts input.
-import * as THREE from '../vendor/three.module.js';
 import * as R from './rules.js';
 import * as C from './content.js';
 import { audio } from './audio.js';
 import { platform } from './platform.js';
+import { CATEGORIES, DEFAULT_GFX, PRESETS, choosePreset, describe, presetTier, resolve } from './gfx.js';
+import { fmt, gfxStrings, pickLocale } from './gfx-strings.js';
 
 const $ = (id) => document.getElementById(id);
 const clamp = (v, lo, hi) => Math.max(lo, Math.min(hi, v));
@@ -36,7 +37,7 @@ const DEFAULT_STORE = {
     largeText: false,
     leftHanded: false,
     haptics: true,
-    quality: 'medium',
+    gfx: { preset: 'auto', render_scale: 1, adaptive: true, show_fps: false },
   },
   profile: { name: 'Guest' },
   journey: { unlocked: 1, stars: {} },
@@ -67,7 +68,7 @@ function saveStore() {
 }
 
 // ---------------------------------------------------------------------------
-// Settings application (CSS classes, theme, audio, quality)
+// Settings application (CSS classes, theme, audio; graphics via applyGraphics)
 // ---------------------------------------------------------------------------
 
 function theme() { return C.getTheme(store.settings.theme); }
@@ -198,158 +199,64 @@ function unlockAchievement(id) {
 }
 
 // ---------------------------------------------------------------------------
-// Three.js decorative diorama — travel journal pages, hills, water, lantern,
-// trees. Deterministic decoration from createStream(seed + '-deco').
+// Decorative diorama (js/diorama.js) + graphics settings (js/gfx.js).
+// Deterministic decoration from createStream(seed + '-deco').
 // ---------------------------------------------------------------------------
 
-const QUALITY = {
-  low: { dpr: 1, shadows: false, trees: 6, hills: 3 },
-  medium: { dpr: 1.5, shadows: false, trees: 12, hills: 4 },
-  high: { dpr: 2, shadows: true, trees: 20, hills: 6 },
-};
-
-let renderer = null, scene3 = null, camera3 = null, rafId = null;
-let threeOK = false;
+let dio = null;
 let decoSeed = 'title';
-let lanternLight = null, waterMesh = null;
-let frameClock = 0;
+let rafId = null;
 
-function hex(c) { return new THREE.Color(c); }
+const motionQuery = window.matchMedia('(prefers-reduced-motion: reduce)');
+const isReducedMotion = () => store.settings.reducedMotion || motionQuery.matches;
+const isMobileDevice = () =>
+  window.matchMedia('(pointer: coarse)').matches && !window.matchMedia('(any-pointer: fine)').matches;
 
-function disposeScene() {
-  if (!scene3) return;
-  scene3.traverse((o) => {
-    if (o.geometry) o.geometry.dispose();
-    if (o.material) {
-      for (const m of Array.isArray(o.material) ? o.material : [o.material]) m.dispose();
-    }
-  });
-  scene3 = null;
+function gfxSaved() {
+  const g = store.settings.gfx;
+  return g && typeof g === 'object' ? g : { ...DEFAULT_GFX };
 }
 
+// Rebuilds only when the theme or seed changed (the diorama caches its key).
 function rebuildScene() {
-  if (!renderer) return;
-  disposeScene();
-  const t = theme();
-  const q = QUALITY[store.settings.quality] || QUALITY.medium;
-  scene3 = new THREE.Scene();
-  scene3.background = hex(t.sky);
-  scene3.fog = new THREE.Fog(hex(t.sky), 18, 42);
-
-  const amb = new THREE.AmbientLight(hex(t.paper), 0.85);
-  const key = new THREE.DirectionalLight(0xfff2df, 1.1);
-  key.position.set(6, 10, 5);
-  if (q.shadows) {
-    key.castShadow = true;
-    key.shadow.mapSize.set(1024, 1024);
-  }
-  scene3.add(amb, key);
-
-  const deco = R.createStream(decoSeed + '-deco');
-  const mat = (color, extra = {}) => new THREE.MeshStandardMaterial({ color: hex(color), roughness: 0.9, ...extra });
-
-  // Journal pages: stacked sheets under the diorama.
-  const pageGeo = new THREE.BoxGeometry(16, 0.18, 11);
-  for (let i = 0; i < 4; i++) {
-    const page = new THREE.Mesh(pageGeo, mat(t.paper));
-    page.position.set((deco.next() - 0.5) * 0.6, -1.6 - i * 0.2, (deco.next() - 0.5) * 0.6);
-    page.rotation.y = (deco.next() - 0.5) * 0.16;
-    page.receiveShadow = q.shadows;
-    scene3.add(page);
-  }
-
-  // Ground plane.
-  const ground = new THREE.Mesh(new THREE.CylinderGeometry(9, 9.6, 0.5, 40), mat(t.ground));
-  ground.position.y = -1.3;
-  ground.receiveShadow = q.shadows;
-  scene3.add(ground);
-
-  // Water inlet on one side.
-  waterMesh = new THREE.Mesh(
-    new THREE.CylinderGeometry(3.2, 3.4, 0.56, 28),
-    mat(t.water, { roughness: 0.35, metalness: 0.1 })
-  );
-  waterMesh.position.set(-4.4 + deco.next() * 1.5, -1.26, 2.6 + deco.next());
-  scene3.add(waterMesh);
-
-  // Hills.
-  for (let i = 0; i < q.hills; i++) {
-    const r = 1.6 + deco.next() * 2.2;
-    const hill = new THREE.Mesh(new THREE.SphereGeometry(r, 20, 12, 0, Math.PI * 2, 0, Math.PI / 2), mat(t.hill));
-    const ang = deco.next() * Math.PI * 2;
-    const dist = 6.5 + deco.next() * 4;
-    hill.position.set(Math.cos(ang) * dist, -1.4, Math.sin(ang) * dist - 3);
-    hill.castShadow = q.shadows;
-    scene3.add(hill);
-  }
-
-  // Trees: cone canopies on cylinder trunks.
-  const trunkGeo = new THREE.CylinderGeometry(0.07, 0.1, 0.5, 6);
-  const canopyGeo = new THREE.ConeGeometry(0.42, 1.1, 8);
-  for (let i = 0; i < q.trees; i++) {
-    const ang = deco.next() * Math.PI * 2;
-    const dist = 3.4 + deco.next() * 4.6;
-    const x = Math.cos(ang) * dist;
-    const z = Math.sin(ang) * dist - 2.5;
-    if (waterMesh && Math.hypot(x - waterMesh.position.x, z - waterMesh.position.z) < 3.6) continue;
-    const s = 0.7 + deco.next() * 0.8;
-    const trunk = new THREE.Mesh(trunkGeo, mat(t.rock));
-    trunk.position.set(x, -1.05 + 0.25 * s, z);
-    trunk.scale.setScalar(s);
-    const canopy = new THREE.Mesh(canopyGeo, mat(t.tree));
-    canopy.position.set(x, -1.05 + (0.5 + 0.55) * s, z);
-    canopy.scale.setScalar(s);
-    canopy.castShadow = q.shadows;
-    scene3.add(trunk, canopy);
-  }
-
-  // Lantern: warm point light on a small post.
-  const post = new THREE.Mesh(new THREE.CylinderGeometry(0.05, 0.07, 1.5, 6), mat(t.ink));
-  post.position.set(3.6, -0.55, 1.8);
-  const lampMat = new THREE.MeshStandardMaterial({ color: 0xffd9a0, emissive: 0xffb85c, emissiveIntensity: 0.9 });
-  const lamp = new THREE.Mesh(new THREE.SphereGeometry(0.18, 12, 10), lampMat);
-  lamp.position.set(3.6, 0.28, 1.8);
-  lanternLight = new THREE.PointLight(0xffc27a, 1.6, 12);
-  lanternLight.position.copy(lamp.position);
-  scene3.add(post, lamp, lanternLight);
-
-  camera3 = new THREE.PerspectiveCamera(46, 2, 0.1, 100);
-  camera3.position.set(0, 4.2, 12.5);
-  camera3.lookAt(0, -0.6, 0);
-  threeOK = true;
+  if (!dio) return;
+  dio.setTheme(theme());
+  dio.setSeed(decoSeed);
 }
 
-function initThree() {
+/** Apply saved graphics settings live and reflect them on <body> for styling/tests. */
+function applyGraphics() {
+  const saved = gfxSaved();
+  const q = dio ? dio.setGraphics(saved) : resolve(saved, 'low');
+  const b = document.body;
+  b.dataset.gfxPreset = q.preset;
+  b.dataset.gfxAuto = String(q.auto);
+  for (const cat of Object.keys(CATEGORIES)) b.dataset[`gfx${cat[0].toUpperCase()}${cat.slice(1)}`] = q[cat];
+  b.classList.toggle('gfx-detailed', q.detail === 'detailed');
+  refreshGraphicsInfo();
+}
+
+async function initThree() {
   const canvas = $('scene');
   try {
-    renderer = new THREE.WebGLRenderer({ canvas, antialias: true });
+    // Loaded lazily so the DOM game still boots if three.js cannot load.
+    const { createDiorama } = await import('./diorama.js');
+    dio = createDiorama(canvas, { isReducedMotion, mobile: isMobileDevice() });
   } catch {
-    renderer = null;
+    dio = null;
     $('scene-fallback').hidden = false;
     canvas.hidden = true;
+    applyGraphics();
     return;
   }
-  applyQuality();
-  rebuildScene();
-  const onResize = () => {
-    if (!renderer || !camera3) return;
-    renderer.setSize(window.innerWidth, window.innerHeight);
-    camera3.aspect = window.innerWidth / window.innerHeight;
-    camera3.updateProjectionMatrix();
-  };
-  window.addEventListener('resize', onResize);
-  onResize();
+  dio.onChange = refreshGraphicsInfo;
+  document.body.dataset.gfxReady = 'true';
+  dio.setTheme(theme());
+  dio.setSeed(decoSeed);
+  applyGraphics();
   const loop = () => {
     rafId = null;
-    if (document.hidden || !threeOK) { scheduleLoop(); return; }
-    frameClock += 1 / 60;
-    if (!store.settings.reducedMotion) {
-      camera3.position.x = Math.sin(frameClock * 0.05) * 0.9;
-      camera3.lookAt(0, -0.6, 0);
-      if (lanternLight) lanternLight.intensity = 1.5 + Math.sin(frameClock * 2.3) * 0.25;
-      if (waterMesh) waterMesh.position.y = -1.26 + Math.sin(frameClock * 0.8) * 0.03;
-    }
-    renderer.render(scene3, camera3);
+    if (!document.hidden && dio) dio.render();
     scheduleLoop();
   };
   const scheduleLoop = () => { if (rafId === null) rafId = requestAnimationFrame(loop); };
@@ -358,13 +265,6 @@ function initThree() {
     audio.setMuted(document.hidden || allMuted);
   });
   scheduleLoop();
-}
-
-function applyQuality() {
-  if (!renderer) return;
-  const q = QUALITY[store.settings.quality] || QUALITY.medium;
-  renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, q.dpr));
-  renderer.shadowMap.enabled = q.shadows;
 }
 
 // ---------------------------------------------------------------------------
@@ -1498,13 +1398,121 @@ function openSettingsFromForm() {
     themeSel.appendChild(opt);
   }
   themeSel.value = s.theme;
-  $('set-quality').value = s.quality;
+  syncGraphicsPanel();
   $('set-reduced-motion').checked = s.reducedMotion;
   $('set-high-contrast').checked = s.highContrast;
   $('set-cvd').checked = s.cvd;
   $('set-large-text').checked = s.largeText;
   $('set-left-handed').checked = s.leftHanded;
   $('set-haptics').checked = s.haptics;
+}
+
+// --- Graphics section of the Settings screen ------------------------------
+
+let gfxLocale = 'en-US';
+const gfxL = () => gfxStrings(gfxLocale);
+
+function setGraphicsSaved(next) {
+  store.settings.gfx = next;
+  applyGraphics();
+  syncGraphicsPanel();
+  saveStore();
+}
+
+function gfxOption(select, value, text) {
+  const o = document.createElement('option');
+  o.value = value;
+  o.textContent = text;
+  select.appendChild(o);
+  return o;
+}
+
+function buildGraphicsPanel() {
+  gfxLocale = pickLocale(navigator.languages?.length ? navigator.languages : [navigator.language]);
+  const L = gfxL();
+  $('gfx-quality-label').textContent = L.quality;
+  const q = $('set-quality');
+  q.innerHTML = '';
+  gfxOption(q, 'auto', L.auto);
+  for (const p of PRESETS) gfxOption(q, p, L[p]);
+  q.addEventListener('change', (e) => setGraphicsSaved(choosePreset(gfxSaved(), e.target.value)));
+
+  $('gfx-render-scale-label').textContent = L.renderScale;
+  const scale = $('gfx-render-scale');
+  scale.addEventListener('input', () => { $('gfx-render-scale-value').textContent = `${scale.value}%`; });
+  scale.addEventListener('change', () => setGraphicsSaved({ ...gfxSaved(), render_scale: Number(scale.value) / 100 }));
+
+  $('gfx-effects-heading').textContent = L.effects;
+  const box = $('gfx-categories');
+  box.innerHTML = '';
+  for (const [cat, tiers] of Object.entries(CATEGORIES)) {
+    const label = document.createElement('label');
+    const span = document.createElement('span');
+    span.textContent = L.cat[cat];
+    const sel = document.createElement('select');
+    sel.id = `gfx-${cat}`;
+    sel.dataset.gfxCategory = cat;
+    gfxOption(sel, 'preset', '');
+    for (const t of tiers) gfxOption(sel, t, L.tier[t] || t);
+    sel.addEventListener('change', () => {
+      const next = { ...gfxSaved() };
+      if (sel.value === 'preset') delete next[cat]; else next[cat] = sel.value;
+      setGraphicsSaved(next);
+    });
+    label.append(span, sel);
+    box.appendChild(label);
+  }
+
+  $('gfx-adaptive-label').textContent = L.adaptive;
+  $('gfx-show-fps-label').textContent = L.showFps;
+  $('gfx-adaptive').addEventListener('change', (e) => setGraphicsSaved({ ...gfxSaved(), adaptive: e.target.checked }));
+  $('gfx-show-fps').addEventListener('change', (e) => setGraphicsSaved({ ...gfxSaved(), show_fps: e.target.checked }));
+}
+
+function syncGraphicsPanel() {
+  const L = gfxL();
+  const saved = gfxSaved();
+  const detected = dio ? dio.detected : 'low';
+  const q = resolve(saved, detected);
+  const sel = $('set-quality');
+  sel.options[0].textContent = fmt(L.auto, { tier: L[detected] });
+  sel.value = PRESETS.includes(saved.preset) ? saved.preset : 'auto';
+  const pct = Math.round((Number(saved.render_scale) || 1) * 100);
+  $('gfx-render-scale').value = String(pct);
+  $('gfx-render-scale-value').textContent = `${pct}%`;
+  for (const cat of Object.keys(CATEGORIES)) {
+    const s = $(`gfx-${cat}`);
+    s.options[0].textContent = fmt(L.fromPreset, { tier: L.tier[presetTier(q.preset, cat)] || presetTier(q.preset, cat) });
+    s.value = CATEGORIES[cat].includes(saved[cat]) ? saved[cat] : 'preset';
+  }
+  $('gfx-adaptive').checked = saved.adaptive !== false;
+  $('gfx-show-fps').checked = !!saved.show_fps;
+  refreshGraphicsInfo();
+}
+
+let gfxInfoTimer = null;
+function refreshGraphicsInfo() {
+  const summary = $('gfx-summary');
+  if (!summary) return;
+  const L = gfxL();
+  const note = $('gfx-note');
+  if (!dio) {
+    summary.textContent = '';
+    note.textContent = L.noWebgl;
+    note.hidden = false;
+    return;
+  }
+  const info = dio.info();
+  summary.textContent = `${info.gpu || L.unknownGpu} · ${describe(info.resolved, info.pixels, L.sum)}`;
+  note.textContent = L.postUnavailable;
+  note.hidden = !info.postFailed;
+  document.body.dataset.gfxPost = info.postFailed ? 'failed' : info.resolved.post ? 'on' : 'off';
+  // Pixel size settles after the next frame renders at the new ratio.
+  clearTimeout(gfxInfoTimer);
+  gfxInfoTimer = setTimeout(() => {
+    const i2 = dio.info();
+    summary.textContent = `${i2.gpu || L.unknownGpu} · ${describe(i2.resolved, i2.pixels, L.sum)}`;
+  }, 200);
 }
 
 function wireSettings() {
@@ -1515,7 +1523,6 @@ function wireSettings() {
   bind('set-vol-effects', (e) => { s.volEffects = e.target.value / 100; applySettings(); audio.play('correct'); });
   bind('set-vol-ambience', (e) => { s.volAmbience = e.target.value / 100; applySettings(); });
   bind('set-theme', (e) => { s.theme = e.target.value; applySettings(); });
-  bind('set-quality', (e) => { s.quality = e.target.value; applyQuality(); rebuildScene(); saveStore(); });
   bind('set-reduced-motion', (e) => { s.reducedMotion = e.target.checked; applySettings(); });
   bind('set-high-contrast', (e) => { s.highContrast = e.target.checked; applySettings(); });
   bind('set-cvd', (e) => { s.cvd = e.target.checked; applySettings(); });
@@ -1568,13 +1575,13 @@ function wirePause() {
     $('pause-mute').textContent = allMuted ? 'Unmute all' : 'Mute all';
   });
   $('pause-quality').addEventListener('click', () => {
-    const order = ['low', 'medium', 'high'];
-    const s = store.settings;
-    s.quality = order[(order.indexOf(s.quality) + 1) % order.length];
-    applyQuality();
-    rebuildScene();
-    saveStore();
-    toast(`Quality: ${s.quality}`);
+    const order = ['auto', ...PRESETS];
+    const cur = gfxSaved().preset || 'auto';
+    const next = order[(order.indexOf(cur) + 1) % order.length];
+    setGraphicsSaved(choosePreset(gfxSaved(), next));
+    const L = gfxL();
+    const shown = next === 'auto' ? fmt(L.auto, { tier: L[dio ? dio.detected : 'low'] }) : L[next];
+    toast(fmt(L.qualityToast, { tier: shown }));
   });
   $('pause-contrast').addEventListener('click', () => {
     store.settings.highContrast = !store.settings.highContrast;
@@ -1716,6 +1723,7 @@ function init() {
             settings: { ...DEFAULT_STORE.settings, ...(parsed.settings || {}) } };
           saveStore(); // local cache mirrors the remote doc
           applySettings();
+          applyGraphics();
           refreshTitle();
         }
       } catch { /* corrupt remote: keep local */ }
@@ -1729,6 +1737,7 @@ function init() {
   wireDrawers();
   wireOsk();
   buildHelpCards();
+  buildGraphicsPanel();
   initThree();
   syncTime();
   setInterval(syncTime, 5 * 60 * 1000);

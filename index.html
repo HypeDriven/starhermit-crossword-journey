@@ -7,6 +7,7 @@
 <meta name="description" content="Crossword Journey — solve clue-driven intersecting words across a travel journal of scenic dioramas." />
 <title>Crossword Journey</title>
 <link rel="stylesheet" href="/css/style.css" />
+<script type="importmap">{ "imports": { "three": "/vendor/three.module.js", "three/addons/": "/vendor/addons/" } }</script>
 </head>
 <body>
 <a class="skip-link" href="#board-region">Skip to crossword board</a>
@@ -150,13 +151,21 @@
         <fieldset>
           <legend>Graphics</legend>
           <label>Theme <select id="set-theme"></select></label>
-          <label>Quality
-            <select id="set-quality">
-              <option value="low">Low</option>
-              <option value="medium">Medium</option>
-              <option value="high">High</option>
-            </select>
+          <label class="gfx-quality-row"><span id="gfx-quality-label">Quality</span>
+            <select id="set-quality" data-gfx="preset"></select>
           </label>
+          <label class="gfx-scale-row"><span id="gfx-render-scale-label">Render scale</span>
+            <span class="gfx-scale-ctl">
+              <input type="range" id="gfx-render-scale" data-gfx="render_scale" min="50" max="200" step="5" value="100" />
+              <output id="gfx-render-scale-value" for="gfx-render-scale">100%</output>
+            </span>
+          </label>
+          <p class="gfx-subhead" id="gfx-effects-heading">Effects</p>
+          <div id="gfx-categories" class="gfx-categories"></div>
+          <label><span id="gfx-adaptive-label">Adaptive resolution</span> <input type="checkbox" id="gfx-adaptive" data-gfx="adaptive" /></label>
+          <label><span id="gfx-show-fps-label">Show frame rate</span> <input type="checkbox" id="gfx-show-fps" data-gfx="show_fps" /></label>
+          <p id="gfx-summary" class="gfx-summary" aria-live="polite"></p>
+          <p id="gfx-note" class="gfx-note" hidden></p>
         </fieldset>
         <fieldset>
           <legend>Accessibility</legend>
