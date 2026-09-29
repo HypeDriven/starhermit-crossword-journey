@@ -265,3 +265,7 @@ QA bar (checkable): the first-time player is taught by Learn's banners or can re
 - Tap-to-type on touch devices via a hidden focused text input or an on-screen letter tray.
 - Presence heartbeats and platform-published achievements through the StarHermit API (identity and cloud-saved progression are done).
 - Authored per-theme ambience loops (harbor gulls and water, pine wind, desert wind, frost hush, orchard rail) on the ambience bus.
+
+## Browser interference
+
+`browser-guard.js` (loaded from `index.html`) suppresses browser UI that gets in the way of play: the right-click context menu, the iOS long-press callout, copy / cut / paste, and page text selection. Text fields (inputs, textareas, selects, contenteditable) keep normal selection, context menu and clipboard behaviour.
