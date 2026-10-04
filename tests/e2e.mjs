@@ -9,9 +9,9 @@
  *
  * The solution for Journey page 1 is read from js/content.js (deterministic
  * authored seed); every action still goes through real clicks/key presses.
- * The game is fully playable offline; this test's embedded static server
- * stubs /api/v1/time and /api/v1/score so the online-only bits (clock sync,
- * ranked submission) are exercised too.
+ * The embedded server is purely static: a standalone load must make zero
+ * same-origin /api or /ws requests. The signed-in pass stubs the platform
+ * API and GET /api/v1/time (allowed only with a launch token).
  *
  * Two passes: desktop 1280x800, then mobile 390x844 with touch. Any
  * non-benign console error or pageerror fails the run.
@@ -53,18 +53,6 @@ const MIME = {
 const server = createServer(async (req, res) => {
   try {
     const url = new URL(req.url, 'http://127.0.0.1');
-    if (url.pathname === '/api/v1/time') {
-      const now = Date.now();
-      res.writeHead(200, { 'content-type': 'application/json' });
-      res.end(JSON.stringify({ now, utcDay: new Date(now).toISOString().slice(0, 10) }));
-      return;
-    }
-    if (url.pathname === '/api/v1/score' && req.method === 'POST') {
-      for await (const _ of req) { /* drain */ }
-      res.writeHead(200, { 'content-type': 'application/json' });
-      res.end(JSON.stringify({ ok: true, board: 'e2e-local', rank: 1 }));
-      return;
-    }
     let path = normalize(decodeURIComponent(url.pathname));
     if (path === '/' || path === sep) path = '/index.html';
     const file = join(ROOT, path);
@@ -118,10 +106,77 @@ async function solveGrid(page, vp) {
   }
 }
 
+// StarHermit routes (the game's own /api/v1/time is separate).
+const PLATFORM_API = /^\/api\/v1\/(games|users|me|leaderboards|chat)\//;
+// Any own-server route: forbidden in a standalone load.
+const OWN_SERVER = /^\/(api|ws)(\/|$)/;
+
+// Signed-in pass: launch token in the fragment, platform API stubbed.
+async function platformPass(vpName, viewport, hasTouch) {
+  const context = await browser.newContext({ viewport, hasTouch });
+  const page = await context.newPage();
+  const errors = [], seen = [];
+  page.on('pageerror', (e) => errors.push(`pageerror: ${e.message}`));
+  page.on('console', (m) => {
+    if ((m.type() === 'error' || m.type() === 'warning') && !browserNoise.test(m.text())) errors.push(`console ${m.type()}: ${m.text()}`);
+  });
+  const b64u = (o) => Buffer.from(JSON.stringify(o)).toString('base64url');
+  const jwt = `${b64u({ alg: 'none' })}.${b64u({ sub: 'u-e2e-0001', game_scope: 'crossword-journey', exp: Math.floor(Date.now() / 1000) + 3600 })}.sig`;
+  await page.route((url) => PLATFORM_API.test(url.pathname), (route) => {
+    const req = route.request(), u = new URL(req.url());
+    seen.push(req.method() + ' ' + u.pathname);
+    const json = (o) => route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify(o) });
+    if (u.pathname.endsWith('/profile')) return json({ nickname: 'Pip Tester' });
+    if (u.pathname.endsWith('/settings') && req.method() === 'GET') return json({ settings: { highContrast: true } });
+    if (u.pathname.endsWith('/controls')) return json({ actions: [{ action: 'reveal', codes: ['F2'] }] });
+    return route.fulfill({ status: 204 });
+  });
+  await page.route((url) => url.pathname === '/api/v1/time', (route) => {
+    const now = Date.now();
+    return route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ now, utcDay: new Date(now).toISOString().slice(0, 10) }) });
+  });
+  const tag = `[platform-${vpName}]`;
+  try {
+    await step(`${tag} signed in: nickname, save load, fragment stripped`, async () => {
+      await page.goto(`${BASE}/#game_token=${jwt}`);
+      await page.waitForFunction(() => /Pip Tester/.test(document.getElementById('topbar-status').textContent), null, { timeout: 8000 });
+      await page.waitForFunction(() => document.getElementById('profile-sub').textContent === 'Pip Tester', null, { timeout: 3000 });
+      if (await page.evaluate(() => location.hash)) throw new Error('launch fragment not stripped');
+      if (await page.locator('#btn-signin:visible').count()) throw new Error('sign-in shown while signed in');
+      if (!seen.includes('GET /api/v1/me/cloud-saves/' + encodeURIComponent('game:crossword-journey'))) throw new Error('no cloud load: ' + seen.join(', '));
+    });
+    await step(`${tag} platform settings applied (high contrast)`, async () => {
+      await page.waitForFunction(() => document.body.classList.contains('hc'), null, { timeout: 5000 });
+    });
+    await step(`${tag} invite a friend shows a confirmation toast`, async () => {
+      await page.locator('#btn-invite').scrollIntoViewIfNeeded();
+      await page.click('#btn-invite');
+      await page.waitForSelector('#toasts .toast', { timeout: 3000 });
+      const box = await page.locator('#toasts .toast').first().boundingBox();
+      if (!box || box.x < 0 || box.x + box.width > viewport.width + 1) throw new Error('toast off-screen ' + JSON.stringify(box));
+      await page.screenshot({ path: SHOT('platform', vpName) });
+    });
+    await step(`${tag} help lists the platform key binding`, async () => {
+      await page.click('#nav-help');
+      await page.waitForFunction(() => /F2/.test(document.getElementById('help-cards').textContent), null, { timeout: 3000 });
+    });
+  } finally {
+    if (errors.length) {
+      failures++;
+      console.error(`[platform-${vpName}] PAGE ERRORS:\n` + errors.join('\n'));
+    }
+    await context.close();
+  }
+}
+
 async function runPass(vpName, viewport, hasTouch) {
   const context = await browser.newContext({ viewport, hasTouch });
   const page = await context.newPage();
   const errors = [];
+  page.on('request', (r) => {
+    const u = new URL(r.url());
+    if (u.origin === BASE && OWN_SERVER.test(u.pathname)) errors.push('standalone made an own-server call: ' + r.url());
+  });
   page.on('pageerror', (e) => errors.push(`pageerror: ${e.message}`));
   page.on('console', (m) => {
     if ((m.type() === 'error' || m.type() === 'warning') && !browserNoise.test(m.text())) errors.push(`console ${m.type()}: ${m.text()}`);
@@ -264,6 +319,8 @@ async function runPass(vpName, viewport, hasTouch) {
 try {
   await runPass('desktop', { width: 1280, height: 800 }, false);
   await runPass('mobile', { width: 390, height: 844 }, true);
+  await platformPass('desktop', { width: 1280, height: 800 }, false);
+  await platformPass('mobile', { width: 390, height: 844 }, true);
 } finally {
   await browser.close();
   server.close();

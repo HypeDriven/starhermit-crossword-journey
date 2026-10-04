@@ -56,6 +56,10 @@
           <span class="menu-card-sub" id="profile-sub">Guest</span>
         </button>
       </div>
+      <div class="menu-platform" id="menu-platform" hidden>
+        <button type="button" id="btn-signin" class="menu-card" hidden><span class="menu-card-title" id="btn-signin-label">Sign in with StarHermit</span></button>
+        <button type="button" id="btn-invite" class="menu-card" hidden><span class="menu-card-title" id="btn-invite-label">Invite a friend</span></button>
+      </div>
     </section>
 
     <!-- ================= Mode select ================= -->
@@ -234,6 +238,7 @@
 </div>
 
 <noscript><p class="noscript">Crossword Journey needs JavaScript to run. The board is fully usable without WebGL.</p></noscript>
+<script src="/starhermit-sdk.js"></script>
 <script type="module" src="/js/main.js"></script>
 </body>
 </html>

@@ -18,6 +18,20 @@ import { fmt, gfxStrings, pickLocale } from './gfx-strings.js';
 const $ = (id) => document.getElementById(id);
 const clamp = (v, lo, hi) => Math.max(lo, Math.min(hi, v));
 
+// Platform UI strings (account status, sign-in, invite) in the nine locales.
+const PT = {
+  'en-US': { offline: 'Offline — progress is stored on this device.', playing: 'Playing as {name}', synced: 'progress synced', saving: 'saving…', nosync: 'cloud sync unavailable', signIn: 'Sign in with StarHermit', invite: 'Invite a friend', copied: 'Invite link copied to the clipboard.', copyFail: 'Could not copy — invite link: {link}' },
+  'en-GB': { offline: 'Offline — progress is stored on this device.', playing: 'Playing as {name}', synced: 'progress synced', saving: 'saving…', nosync: 'cloud sync unavailable', signIn: 'Sign in with StarHermit', invite: 'Invite a friend', copied: 'Invite link copied to the clipboard.', copyFail: 'Could not copy — invite link: {link}' },
+  'es-419': { offline: 'Sin conexión: el progreso se guarda en este dispositivo.', playing: 'Jugando como {name}', synced: 'progreso sincronizado', saving: 'guardando…', nosync: 'sincronización en la nube no disponible', signIn: 'Iniciar sesión con StarHermit', invite: 'Invitar a un amigo', copied: 'Enlace de invitación copiado al portapapeles.', copyFail: 'No se pudo copiar. Enlace de invitación: {link}' },
+  'es-ES': { offline: 'Sin conexión: el progreso se guarda en este dispositivo.', playing: 'Jugando como {name}', synced: 'progreso sincronizado', saving: 'guardando…', nosync: 'sincronización en la nube no disponible', signIn: 'Iniciar sesión con StarHermit', invite: 'Invitar a un amigo', copied: 'Enlace de invitación copiado al portapapeles.', copyFail: 'No se ha podido copiar. Enlace de invitación: {link}' },
+  'de-DE': { offline: 'Offline – der Fortschritt wird auf diesem Gerät gespeichert.', playing: 'Du spielst als {name}', synced: 'Fortschritt synchronisiert', saving: 'wird gespeichert…', nosync: 'Cloud-Synchronisierung nicht verfügbar', signIn: 'Mit StarHermit anmelden', invite: 'Freund einladen', copied: 'Einladungslink in die Zwischenablage kopiert.', copyFail: 'Kopieren fehlgeschlagen – Einladungslink: {link}' },
+  'fr-FR': { offline: 'Hors ligne : la progression est enregistrée sur cet appareil.', playing: 'Vous jouez en tant que {name}', synced: 'progression synchronisée', saving: 'enregistrement…', nosync: 'synchronisation cloud indisponible', signIn: 'Se connecter avec StarHermit', invite: 'Inviter un ami', copied: 'Lien d’invitation copié dans le presse-papiers.', copyFail: 'Copie impossible — lien d’invitation : {link}' },
+  'fr-CA': { offline: 'Hors ligne : la progression est enregistrée sur cet appareil.', playing: 'Vous jouez en tant que {name}', synced: 'progression synchronisée', saving: 'enregistrement…', nosync: 'synchronisation infonuagique non disponible', signIn: 'Se connecter avec StarHermit', invite: 'Inviter un ami', copied: 'Lien d’invitation copié dans le presse-papiers.', copyFail: 'Copie impossible — lien d’invitation : {link}' },
+  'pt-BR': { offline: 'Offline — o progresso fica salvo neste dispositivo.', playing: 'Jogando como {name}', synced: 'progresso sincronizado', saving: 'salvando…', nosync: 'sincronização na nuvem indisponível', signIn: 'Entrar com StarHermit', invite: 'Convidar um amigo', copied: 'Link de convite copiado para a área de transferência.', copyFail: 'Não foi possível copiar — link de convite: {link}' },
+  'it-IT': { offline: 'Offline: i progressi sono salvati su questo dispositivo.', playing: 'Giochi come {name}', synced: 'progressi sincronizzati', saving: 'salvataggio…', nosync: 'sincronizzazione cloud non disponibile', signIn: 'Accedi con StarHermit', invite: 'Invita un amico', copied: 'Link di invito copiato negli appunti.', copyFail: 'Impossibile copiare. Link di invito: {link}' }
+};
+const P_STR = PT[pickLocale(navigator.languages?.length ? navigator.languages : [navigator.language])] || PT['en-US'];
+
 // ---------------------------------------------------------------------------
 // Persistence — versioned localStorage document
 // ---------------------------------------------------------------------------
@@ -99,13 +113,15 @@ function haptic(ms = 12) {
 }
 
 // ---------------------------------------------------------------------------
-// Platform: server time sync, score submission, leaderboards (all non-fatal)
+// Platform: time sync (signed in only), leaderboards (all non-fatal)
 // ---------------------------------------------------------------------------
 
-let timeOffset = 0; // serverNow - clientNow
-let serverOnline = false;
+let timeOffset = 0; // serverNow - clientNow (stays 0 standalone: local clock)
 
+// GET /api/v1/time only with a StarHermit launch token; standalone play makes
+// no own-server calls and uses the local clock.
 async function syncTime() {
+  if (!platform.hosted) { timeOffset = 0; updateTopbarStatus(); return; }
   try {
     const t0 = Date.now();
     const res = await fetch('/api/v1/time', { headers: platform.headers() });
@@ -116,9 +132,8 @@ async function syncTime() {
     const now = Number(body.now ?? body.serverTime ?? body.epochMs);
     if (!Number.isFinite(now)) throw new Error('time shape');
     timeOffset = now - Math.round((t0 + t1) / 2); // round-trip adjusted
-    serverOnline = true;
   } catch {
-    serverOnline = false; // fall back to local clock
+    timeOffset = 0; // fall back to local clock
   }
   updateTopbarStatus();
 }
@@ -131,33 +146,13 @@ function updateTopbarStatus() {
   const day = new Date(serverNow()).toISOString().slice(0, 10);
   if (platform.hosted) {
     const name = platform.profile ? platform.profile.name : '…';
-    const syncTxt = platform.sync === 'synced' ? 'progress synced'
-      : platform.sync === 'saving' ? 'saving…'
-      : 'cloud sync unavailable';
+    const syncTxt = platform.sync === 'synced' ? P_STR.synced
+      : platform.sync === 'saving' ? P_STR.saving
+      : P_STR.nosync;
     el.textContent = `${name} · ${syncTxt} · ${day} UTC`;
     return;
   }
-  el.textContent = `${serverOnline ? 'online' : 'offline'} · ${day} UTC`;
-}
-
-async function postScore(envelope, result) {
-  try {
-    const res = await fetch('/api/v1/score', {
-      method: 'POST',
-      headers: platform.headers({ 'content-type': 'application/json' }),
-      body: JSON.stringify({
-        envelope,
-        result: Object.assign({}, result, {
-          name: platform.hosted && platform.profile ? platform.profile.name : result.name,
-          playerId: platform.hosted ? platform.userId : undefined,
-        }),
-      }),
-    });
-    const data = await res.json().catch(() => ({}));
-    return res.ok ? { ok: true, ...data } : { ok: false, error: data.error || `HTTP ${res.status}` };
-  } catch {
-    return { ok: false, error: 'offline' };
-  }
+  el.textContent = `${day} UTC`;
 }
 
 // ---------------------------------------------------------------------------
@@ -921,12 +916,32 @@ function giveUp() {
   dispatch({ type: 'giveUp' });
 }
 
+// Key bindings for the command keys (letters A–Z always type). Codes are
+// KeyboardEvent.code values; the platform may override them per player.
+const DEFAULT_KEYS = {
+  pause: ['Escape'], up: ['ArrowUp'], down: ['ArrowDown'], left: ['ArrowLeft'], right: ['ArrowRight'],
+  nextClue: ['Enter', 'Tab'], toggleDir: ['Space'], clear: ['Backspace', 'Delete'],
+  checkWord: ['KeyC'], checkGrid: ['KeyG'], reveal: ['KeyH'],
+};
+let bindings = DEFAULT_KEYS;
+let keyAction = {};
+function setBindings(b) {
+  bindings = b;
+  keyAction = {};
+  for (const [a, codes] of Object.entries(b)) for (const c of codes || []) keyAction[c] = a;
+}
+setBindings(DEFAULT_KEYS);
+const keyLabel = (code) => String(code).replace(/^Key|^Digit/, '').replace(/^Arrow(.+)$/, '$1 arrow').replace(/^Escape$/, 'Esc');
+const kbd = (action) => (bindings[action] || []).map((c) => `<kbd>${keyLabel(c)}</kbd>`).join('/');
+
 document.addEventListener('keydown', (ev) => {
   if (ev.defaultPrevented) return;
+  if (ev.ctrlKey || ev.metaKey || ev.altKey) return;
   const tag = document.activeElement?.tagName;
   const typing = tag === 'INPUT' || tag === 'SELECT' || tag === 'TEXTAREA';
+  const action = keyAction[ev.code];
 
-  if (ev.key === 'Escape') {
+  if (action === 'pause') {
     if (session.phase === 'active') { ev.preventDefault(); pauseRound(); }
     else if (session.phase === 'paused') { ev.preventDefault(); resumeRound(); }
     return;
@@ -934,15 +949,15 @@ document.addEventListener('keydown', (ev) => {
   if (!active() || typing) return;
 
   // Letters type into the selected square whenever the board has focus.
-  // H/C/G act as command shortcuts when focus is off the grid (e.g. clue
-  // list), so the letters H, C and G remain typeable during play.
+  // Check/reveal shortcuts bound to letter keys act only when focus is off
+  // the grid (e.g. clue list), so those letters remain typeable during play.
   const boardFocused = !!document.activeElement?.closest?.('.board');
-  if (!boardFocused && /^[hHcCgG]$/.test(ev.key)) {
+  const letterKey = /^Key[A-Z]$/.test(ev.code);
+  if ((action === 'reveal' || action === 'checkWord' || action === 'checkGrid') && (!boardFocused || !letterKey)) {
     ev.preventDefault();
-    const k = ev.key.toUpperCase();
-    if (k === 'H') revealHint();
-    if (k === 'C') checkWord();
-    if (k === 'G') checkGrid();
+    if (action === 'reveal') revealHint();
+    if (action === 'checkWord') checkWord();
+    if (action === 'checkGrid') checkGrid();
     return;
   }
 
@@ -957,21 +972,16 @@ document.addEventListener('keydown', (ev) => {
   // activate them; the board itself uses them for clue navigation.
   const onOuterControl = !boardFocused &&
     !!document.activeElement?.closest?.('button, a, [role="button"]');
-  switch (ev.key) {
-    case 'Backspace':
-    case 'Delete':
-      ev.preventDefault(); clearCell(); break;
-    case 'ArrowUp': ev.preventDefault(); moveSelection(-1, 0); break;
-    case 'ArrowDown': ev.preventDefault(); moveSelection(1, 0); break;
-    case 'ArrowLeft': ev.preventDefault(); moveSelection(0, -1); break;
-    case 'ArrowRight': ev.preventDefault(); moveSelection(0, 1); break;
-    case 'Enter':
-      if (onOuterControl) return;
+  switch (action) {
+    case 'clear': ev.preventDefault(); clearCell(); break;
+    case 'up': ev.preventDefault(); moveSelection(-1, 0); break;
+    case 'down': ev.preventDefault(); moveSelection(1, 0); break;
+    case 'left': ev.preventDefault(); moveSelection(0, -1); break;
+    case 'right': ev.preventDefault(); moveSelection(0, 1); break;
+    case 'nextClue':
+      if (ev.code === 'Tab' ? !boardFocused : onOuterControl) return; // allow normal focus navigation / activation
       ev.preventDefault(); nextEntry(ev.shiftKey ? -1 : 1); break;
-    case 'Tab':
-      if (!boardFocused) return; // allow normal focus navigation
-      ev.preventDefault(); nextEntry(ev.shiftKey ? -1 : 1); break;
-    case ' ':
+    case 'toggleDir':
       if (onOuterControl) return;
       ev.preventDefault(); onCellTap(session.sel.cell); break;
   }
@@ -1319,22 +1329,13 @@ function renderResults(validEnvelope) {
     ach.appendChild(el);
   }
 
-  // Submit when the local replay verified.
+  // Results stay on this device; when signed in, the platform board is shown.
   $('results-rank').textContent = '';
   if (validEnvelope && !session.def.ranked) {
     // Unranked rounds (lessons, casual) never go to a shared board.
     $('results-rank').textContent = 'Unranked round — result saved on this device.';
   } else if (validEnvelope) {
-    postScore(validEnvelope, {
-      name: store.profile.name,
-      sessionId: session.sessionId,
-      score: st.score.total,
-      status: st.status,
-    }).then((r) => {
-      if (r.ok) $('results-rank').textContent = `Leaderboard “${r.board}”: rank #${r.rank}`;
-      else if (r.error === 'offline') $('results-rank').textContent = 'Score not submitted — you appear to be offline. Result saved on this device.';
-      else $('results-rank').textContent = `Score board unavailable (${r.error}) — result saved on this device.`;
-    });
+    $('results-rank').textContent = 'Result saved on this device.';
     // Platform board (read-only): top entries with nicknames when hosted.
     if (platform.hosted) {
       platform.fetchLeaderboard().then((entries) => {
@@ -1417,6 +1418,23 @@ function setGraphicsSaved(next) {
   applyGraphics();
   syncGraphicsPanel();
   saveStore();
+  pushSettings();
+}
+
+// Platform settings KV: every preference key of store.settings.
+function pushSettings() {
+  if (platform.hosted) platform.patchSettings({ ...store.settings });
+}
+function applyRemoteSettings(remote) {
+  let changed = false;
+  for (const k of Object.keys(DEFAULT_STORE.settings)) {
+    const v = remote?.[k];
+    if (v != null && typeof v === typeof DEFAULT_STORE.settings[k]) {
+      store.settings[k] = k === 'gfx' ? { ...DEFAULT_STORE.settings.gfx, ...v } : v;
+      changed = true;
+    }
+  }
+  return changed;
 }
 
 function gfxOption(select, value, text) {
@@ -1529,6 +1547,10 @@ function wireSettings() {
   bind('set-large-text', (e) => { s.largeText = e.target.checked; applySettings(); });
   bind('set-left-handed', (e) => { s.leftHanded = e.target.checked; applySettings(); });
   bind('set-haptics', (e) => { s.haptics = e.target.checked; saveStore(); });
+  // Mirror every preference change to the platform settings KV (debounced).
+  for (const id of ['set-vol-music', 'set-vol-effects', 'set-vol-ambience', 'set-theme', 'set-reduced-motion', 'set-high-contrast', 'set-cvd', 'set-large-text', 'set-left-handed', 'set-haptics']) {
+    $(id).addEventListener('change', pushSettings);
+  }
   $('btn-settings-back').addEventListener('click', goBackFromSub);
   $('btn-replay-tutorial').addEventListener('click', () => startRound(C.learnDef(), { tutorial: true }));
 }
@@ -1536,12 +1558,12 @@ function wireSettings() {
 function buildHelpCards() {
   const cards = [
     ['Enter letters', 'Type <kbd>A</kbd>–<kbd>Z</kbd> with the keyboard, or tap a square and type. Letters shared between crossing words fill both.'],
-    ['Move around', '<kbd>Arrow keys</kbd> move the selection. <kbd>Enter</kbd>/<kbd>Tab</kbd> jumps to the next clue. Tap a clue in the list to select its word.'],
-    ['Direction', 'Tap the selected square again (or press <kbd>Space</kbd>) to switch between Across and Down.'],
-    ['Fix mistakes', '<kbd>Backspace</kbd> clears a square. Locked letters (confirmed ✓ or revealed ◆) cannot be changed.'],
-    ['Check', '<kbd>C</kbd> checks the current word, <kbd>G</kbd> checks the grid (from the clue list, or via the action buttons). Correct letters lock with ✓; wrong ones are flagged ✗. Each check costs a few points.'],
-    ['Reveal', '<kbd>H</kbd> reveals one letter (◆) at a small score cost. Checks and reveals never lock you out of finishing.'],
-    ['Pause', '<kbd>Esc</kbd> pauses. The clock stops while paused or while the tab is hidden.'],
+    ['Move around', `${kbd('up')} ${kbd('down')} ${kbd('left')} ${kbd('right')} move the selection. ${kbd('nextClue')} jumps to the next clue. Tap a clue in the list to select its word.`],
+    ['Direction', `Tap the selected square again (or press ${kbd('toggleDir')}) to switch between Across and Down.`],
+    ['Fix mistakes', `${kbd('clear')} clears a square. Locked letters (confirmed ✓ or revealed ◆) cannot be changed.`],
+    ['Check', `${kbd('checkWord')} checks the current word, ${kbd('checkGrid')} checks the grid (from the clue list, or via the action buttons). Correct letters lock with ✓; wrong ones are flagged ✗. Each check costs a few points.`],
+    ['Reveal', `${kbd('reveal')} reveals one letter (◆) at a small score cost. Checks and reveals never lock you out of finishing.`],
+    ['Pause', `${kbd('pause')} pauses. The clock stops while paused or while the tab is hidden.`],
     ['Winning', 'Fill every square correctly to complete the page. Score = letters + words + streaks + time bonus − assists.'],
   ];
   const box = $('help-cards');
@@ -1662,7 +1684,7 @@ function wireDrawers() {
 }
 
 function refreshTitle() {
-  $('profile-sub').textContent = store.profile.name;
+  $('profile-sub').textContent = platform.hosted && platform.profile ? platform.profile.name : store.profile.name;
   const stars = Object.values(store.journey.stars).reduce((a, b) => a + b, 0);
   $('journey-sub').textContent = `Page ${Math.min(store.journey.unlocked, 40)} of 40 · ${stars}★`;
   $('daily-sub').textContent = `${new Date(serverNow()).toISOString().slice(0, 10)} · ranked`;
@@ -1707,29 +1729,59 @@ function wireMenus() {
   $('btn-results-home').addEventListener('click', () => { refreshTitle(); transition('title', 'home'); });
 }
 
+// Signed-in boot work: profile, remote save (wins), settings KV, bindings.
+function syncFromPlatform() {
+  if (!platform.hosted) return;
+  platform.fetchProfile().then(() => { updateTopbarStatus(); refreshTitle(); }).catch(() => {});
+  platform.loadCloud().then((remoteRaw) => {
+    if (!remoteRaw) return;
+    try {
+      const parsed = JSON.parse(remoteRaw);
+      if (parsed && parsed.v === 1) {
+        store = { ...structuredClone(DEFAULT_STORE), ...parsed,
+          settings: { ...DEFAULT_STORE.settings, ...(parsed.settings || {}) } };
+        saveStore(); // local cache mirrors the remote doc
+        applySettings();
+        applyGraphics();
+        refreshTitle();
+      }
+    } catch { /* corrupt remote: keep local */ }
+  }).catch(() => {}).then(() => platform.getSettings()).then((remote) => {
+    if (applyRemoteSettings(remote)) { applySettings(); applyGraphics(); }
+    updateTopbarStatus();
+  }).catch(() => {});
+  platform.loadBindings(DEFAULT_KEYS).then((b) => { setBindings(b); buildHelpCards(); }).catch(() => {});
+}
+
+function refreshPlatformButtons() {
+  const canSign = platform.canSignIn();
+  const canInvite = platform.hosted && !!platform.inviteLink();
+  $('btn-signin').hidden = !canSign;
+  $('btn-invite').hidden = !canInvite;
+  $('menu-platform').hidden = !canSign && !canInvite;
+}
+
+function wirePlatformButtons() {
+  $('btn-signin-label').textContent = P_STR.signIn;
+  $('btn-invite-label').textContent = P_STR.invite;
+  $('btn-signin').addEventListener('click', () => platform.signIn());
+  $('btn-invite').addEventListener('click', () => {
+    const link = platform.inviteLink();
+    if (!link) return;
+    const fail = () => toast(P_STR.copyFail.replace('{link}', link));
+    try { navigator.clipboard.writeText(link).then(() => toast(P_STR.copied), fail); } catch { fail(); }
+  });
+  refreshPlatformButtons();
+}
+
 function init() {
   // Platform handshake first: token read, then the remote save (when hosted)
   // wins over the local cache before anything renders.
   try { platform.init(); } catch { /* offline */ }
-  if (platform.hosted) {
-    platform.onSync(updateTopbarStatus);
-    platform.fetchProfile().then(updateTopbarStatus).catch(() => {});
-    platform.loadCloud().then((remoteRaw) => {
-      if (!remoteRaw) return;
-      try {
-        const parsed = JSON.parse(remoteRaw);
-        if (parsed && parsed.v === 1) {
-          store = { ...structuredClone(DEFAULT_STORE), ...parsed,
-            settings: { ...DEFAULT_STORE.settings, ...(parsed.settings || {}) } };
-          saveStore(); // local cache mirrors the remote doc
-          applySettings();
-          applyGraphics();
-          refreshTitle();
-        }
-      } catch { /* corrupt remote: keep local */ }
-      updateTopbarStatus();
-    }).catch(() => {});
-  }
+  platform.onSync(updateTopbarStatus);
+  platform.onAuth(() => { syncTime(); refreshPlatformButtons(); refreshTitle(); syncFromPlatform(); });
+  syncFromPlatform();
+  wirePlatformButtons();
   applySettings();
   wireMenus();
   wireSettings();

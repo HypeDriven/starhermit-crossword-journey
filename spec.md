@@ -2,7 +2,7 @@
 
 **Status:** shipped; this document describes the game as it runs today.
 **Pitch:** a travel journal whose pages are small crosswords — solve clue-driven words across five scenic regions, one shared page every UTC day.
-**Genre:** clue puzzle (mini crosswords, 5×5 to 9×9). **Players:** 1, with asynchronous ranked boards. **Session:** 2–5 minutes for a 5×5 page, 10–25 minutes for a 9×9 mastery or challenge page.
+**Genre:** clue puzzle (mini crosswords, 5×5 to 9×9). **Players:** 1; ranked results stay on the device (the platform board is shown when signed in). **Session:** 2–5 minutes for a 5×5 page, 10–25 minutes for a 9×9 mastery or challenge page.
 **Platforms:** desktop and mobile browsers, portrait and landscape. **Rendering:** semantic HTML/CSS board (the accessible truth) over a purely decorative Three.js papercraft diorama; no WebGL required to play.
 
 ## 1. File map
@@ -18,7 +18,7 @@
 | `js/rules.js` | Pure deterministic rules engine: `createGame`, `applyCommand`, legality queries, scoring, hashing, `replay`, `compareResults`. Shared by browser and server. |
 | `js/content.js` | Versioned content: 5 themes, 353-word original bank with clues, 8 grid masks, seeded backtracking fill generator, Journey/Learn/Daily/Practice/Challenge defs, validators. |
 | `js/audio.js` | WebAudio: three buses, authored Opus one-shots with synthesized fallbacks, procedural ambience pad and pentatonic music loop. |
-| `server.js` | Node static host + `/api/v1/time`, `/api/v1/score` (authoritative replay validation), `/api/v1/leaderboard`; boards mirrored to `data/leaderboard.json`. |
+| `server.js` | Dev static host. Its legacy `/api/v1/score` and `/api/v1/leaderboard` routes are no longer called by the client; `/api/v1/time` is read only when signed in. |
 | `vendor/three.module.js` | Three.js r160 (decorative scene only), mapped as `three` by the import map in `index.html`. |
 | `vendor/addons/` | Same-revision (0.160.1) three.js addons: EffectComposer, RenderPass, ShaderPass, OutputPass, GTAOPass, UnrealBloomPass, SMAAPass, FXAA, RoomEnvironment and their shader/math imports; mapped as `three/addons/`. |
 | `sfx/*.opus`, `sfx/manifest.txt` | 17 authored clips; canonical `file | event | description | usage` manifest (`manifest.json` drives generation). |
@@ -33,7 +33,7 @@
 1. **The page is the puzzle.** Every round is one journal page: a small, fully-crossed grid you can hold in your head. Rules in: 5×5–9×9 masks, every letter cell belongs to at least one word, mini-crossword numbering. Rules out: full-size 15×15 grids, themed rebus squares, uncrossed letters.
 2. **Crossings are the mechanic, not the trivia.** Clues are short, original and gettable; the skill is using confirmed letters to unlock neighbours. Rules in: streak bonus per consecutive word, letter points awarded on first correct placement, an interactive lesson devoted to crossings. Rules out: obscure trivia, clue puns that need cultural knowledge.
 3. **Assists are honest tools, never traps.** Check and Reveal are always available (unless a Challenge says otherwise), cost a small, visible number of points, lock what they touch, and can never make the page unfinishable. Rules in: ✓/✗/◆ glyphs on every assisted cell, the score breakdown showing exactly what assists cost. Rules out: assists that consume "lives", assists that make a round silently unranked.
-4. **One shared page a day, provably fair.** Daily, Journey and Challenge content is regenerated from its id on the server; a score is accepted only if the replayed command log reproduces the claimed total. Rules in: gapless command ids, deterministic seeds, server-side `replay`. Rules out: client-trusted totals, mutable daily seeds.
+4. **One shared page a day, provably fair.** Daily, Journey and Challenge content is regenerated from its id; a result counts only if the replayed command log reproduces the claimed total. Rules in: gapless command ids, deterministic seeds, `replay` verification. Rules out: client-trusted totals, mutable daily seeds.
 5. **The diorama decorates, the DOM plays.** The 3D scene changes with theme and seed but never carries information; the board, clues and HUD are plain buttons and text that work without WebGL, with a keyboard, and with a screen reader. Rules out: any control that exists only in the canvas.
 
 ## 3. Player experience
@@ -42,7 +42,7 @@
 
 **First 60 seconds.** Title screen shows key art, one dominant **Play** button and three cards (Daily Challenge, Journey, Profile). Play opens mode select; the first item is **Learn — First Page**, a 5×5 grid with six banner lessons that each wait for the real action: type any letter into the pulsing square; finish `1 Across` with its clue shown; complete any crossing word; press Check; press Reveal; finish the page. The banner text is the teaching; there is no separate tutorial screen. Returning players tap Daily Challenge on the title screen: the board appears in one action. The Help screen (top bar, always available, also from Pause) lists every control as rule cards.
 
-**Session shape.** Pick a page → the first playable square is selected and its clue shown in the right rail → type, arrows, Enter to hop clues → words strike through as they complete, streak toasts fire → page completes → results with a six-line score breakdown, achievements, leaderboard rank, and a **Next** button that already knows where you are going (next Journey page, the Daily after Learn, a fresh Practice grid).
+**Session shape.** Pick a page → the first playable square is selected and its clue shown in the right rail → type, arrows, Enter to hop clues → words strike through as they complete, streak toasts fire → page completes → results with a six-line score breakdown, achievements, (signed in) the platform board's top three, and a **Next** button that already knows where you are going (next Journey page, the Daily after Learn, a fresh Practice grid).
 
 **Emotional beat.** The cascade: one confirmed crossing letter turning a stubborn clue obvious, the marimba word chime, the streak counter climbing, and finally the fanfare and lantern-lit results page.
 
@@ -92,7 +92,7 @@ letters 16 × 10 = **160** (the revealed cell earns nothing) · words 35+45+35+4
 |---|---|---|---|---|
 | **Learn — First Page** | `learnDef()`: quay5, difficulty 1, seed `learn-quay` (COW, TRAIL, RAT, STAR, COAST, WOLF) | none, ×1 | no | Six lesson steps (`tutorial.steps`) advance only through rules events. Replayable from Settings. Next → Daily. |
 | **Journey** | `journeyStage(1..40)`: seed `journey-n`, 5 regions × 8 pages, titles authored (`JOURNEY_TITLES`) | ×1; mastery pages (8, 16, 24, 32, 40) ×1.5 with difficulty +1 | yes (`journey` board) | Page n+1 unlocks on a win; stars: 1 + (no assists) + (under par). Progress in `localStorage`. |
-| **Daily Challenge** | `dailyForDate(serverNow)`: id/seed `daily-YYYY-MM-DD`, pattern by weekday (Sun summit9/3, Mon quay5/1, Tue harbor6/1, Wed trail7/2, Thu vale6/2, Fri meadow7/2, Sat vista8/3), theme by date hash | none, ×1 | yes, unless the date is in `DAILY_EXCLUDED` | Same seed everywhere; server regenerates it to validate. |
+| **Daily Challenge** | `dailyForDate(serverNow)` (local clock standalone, server-offset clock when signed in): id/seed `daily-YYYY-MM-DD`, pattern by weekday (Sun summit9/3, Mon quay5/1, Tue harbor6/1, Wed trail7/2, Thu vale6/2, Fri meadow7/2, Sat vista8/3), theme by date hash | none, ×1 | yes, unless the date is in `DAILY_EXCLUDED` | Same seed everywhere; server regenerates it to validate. |
 | **Practice** | `practiceDef(easy|medium|hard)`: random seed per round; easy quay5/open5 d1, medium harbor6/vale6/trail7 d2, hard meadow7/vista8/summit9 d3 | none, ×1 | no (`practice-casual` board) | Next → another grid of the same difficulty. |
 | **Challenges** | `CHALLENGES`: Speed Ink (trail7, 6:00 limit, ×1.5), No Eraser (harbor6, 3 mistakes, ×1.5), Blind Corners (meadow7, 2 checks, ×1.5), Long Haul (vista8, no limits, ×2), Summit Push (summit9, 25:00 + 8 mistakes, ×2) | as listed | yes (board per challenge id) | Fixed seeds, so every player gets the same grid. |
 
@@ -185,7 +185,7 @@ Every meaningful sound has a visible counterpart (toast, glyph, banner or live-r
 
 ## 10. Localization
 
-The shipped build is **English only**: `<html lang="en">`, strings hard-coded in `index.html` (screen chrome), `main.js` (mode blurbs, results, errors, help cards, toasts) and `content.js` (clues, page titles). The word bank and clues are English by construction, so a localized build needs a per-locale bank rather than string translation. Target locales for the product line — en-US, en-GB, es-419, es-ES, de-DE, fr-FR, fr-CA, pt-BR, it-IT — are listed under Design intent (§17). Layout already tolerates ~30 % expansion: 70ch caps on prose, wrapping menu cards, 44 px minimum targets, drawers on compact screens.
+The shipped build is **English only**: `<html lang="en">`, strings hard-coded in `index.html` (screen chrome; the StarHermit sign-in/invite labels, invite toasts and sync-status words are localized in all nine locales via `pickLocale`), `main.js` (mode blurbs, results, errors, help cards, toasts) and `content.js` (clues, page titles). The word bank and clues are English by construction, so a localized build needs a per-locale bank rather than string translation. Target locales for the product line — en-US, en-GB, es-419, es-ES, de-DE, fr-FR, fr-CA, pt-BR, it-IT — are listed under Design intent (§17). Layout already tolerates ~30 % expansion: 70ch caps on prose, wrapping menu cards, 44 px minimum targets, drawers on compact screens.
 
 ## 11. Accessibility (as implemented)
 
@@ -199,35 +199,43 @@ The shipped build is **English only**: `<html lang="en">`, strings hard-coded in
 
 ## 12. StarHermit integration
 
-Manifest: `name=Crossword Journey`, `launch=index.html`, `server=server.js`, `cover=coverart.png`.
+Manifest: `name=Crossword Journey`, `launch=index.html`, `server=server.js`, `cover`, plus one `control.<action>=<Code>[+<Code>] | <Label>` line per command key: `pause`=Escape, `up`/`down`/`left`/`right`=arrows, `nextClue`=Enter+Tab, `toggleDir`=Space, `clear`=Backspace+Delete, `checkWord`=KeyC, `checkGrid`=KeyG, `reveal`=KeyH (letters A–Z always type and are not bindable).
+
+All platform I/O goes through `starhermit-sdk.js` (an unmodified copy of `tools/starhermit-sdk.js`, loaded as a classic script before the `js/main.js` module); `js/platform.js` is a thin adapter over `window.StarHermit` that keeps the game's `platform` API.
 
 | Platform feature | Status |
 |---|---|
-| Server script (`server.js`) | **Used.** Same-origin `/api/v1/time` (round-trip-adjusted offset drives the UTC day and Daily seed; refreshed every 5 minutes), `/api/v1/score` (authoritative replay of the command log, claimed score/status must match, content regenerated from id for ranked boards, idempotent per `sessionId`, 256 KB body cap), `/api/v1/leaderboard?board=` (top 20). Boards: `daily-YYYY-MM-DD`, `journey`, each challenge id, `practice-casual`. Static serving refuses dotfiles, `data/`, `node_modules/`, `tests/`. |
-| Sessions / offline | The round runs locally; the score is posted only after the local replay verifies. Offline shows "offline · date UTC" in the top bar, uses the local clock, and reports "Score not submitted (offline)". |
-| Identity / profile | **Used when hosted.** `js/platform.js` reads `#game_token=<jwt>` from the URL fragment (stripped after the read; query forms for local dev), decodes `sub` + `game_scope` (never hard-coded), sends it as `Authorization: Bearer` on every hosted call, and re-mints it every 45 min via `POST /api/v1/games/{slug}/launch-token` (60 s retry). The top bar shows "<nickname> · sync status · day UTC" from `GET /api/v1/users/{sub}/profile` (never usernames, never `/api/v1/me`; `Player <id8>` fallback); score submissions carry the account nickname + id. Offline keeps the local "Guest" name and the online/offline status. |
-| Presence, invitations, realtime rooms, chat, voice | **Not used** — solo ruleset. |
-| Achievements | Local, in `localStorage` (`cwj:v1`), not published to the platform. |
-| Cloud save | **Used when hosted**: the store document mirrors to one zip+base64 slot at `GET/PUT /api/v1/me/cloud-saves/{slug}` — remote wins on boot (version-validated), saves debounce 2 s and flush on `pagehide`/hidden with keepalive, and the top bar reflects sync status. localStorage stays the offline cache. |
+| Server script (`server.js`) | **Time only, signed in.** With a launch token the client reads same-origin `GET /api/v1/time` (round-trip-adjusted offset drives the UTC day and Daily seed; refreshed every 5 minutes). Standalone (no token) the game makes no own-server requests at all and uses the local clock. Scores are never posted to the own server; `server.js` remains as a dev static host (its score/leaderboard routes are unused). |
+| Sessions / offline | The round runs locally and is verified by a local replay; results are saved on the device. Standalone the top bar shows "date UTC" from the local clock. |
+| Launch token / sign-in | `StarHermit.init()` reads `#game_token=` (library) or `#access_token=` (sign-in return), strips it, takes the slug from `game_scope` and renews the token before expiry; if renewal is refused the game returns to the Guest/offline display and keeps playing locally. On `*.starhermit.com` without a token the title shows "Sign in with StarHermit" (`StarHermit.signIn()`); hidden when signed in or running locally. |
+| Identity / profile | **Used when signed in.** The top bar shows "<nickname> · sync status · day UTC" and the title's Profile card shows the nickname, both from `StarHermit.profile()` (nickname, `Player <id>` fallback); Signed out keeps the local name and shows only the UTC day. |
+| Settings KV | Every preference in `store.settings` (theme, three volumes, reduced motion, high contrast, colour-blind aid, large text, left-handed, haptics, graphics object) is mirrored with `patchSettings` (400 ms debounce) when changed; on boot `getSettings()` is applied over the local values (platform wins). |
+| Invite link | When signed in the title shows "Invite a friend": copies `StarHermit.inviteLink()` and confirms with a toast (shows the link if copying is blocked). |
+| Controls | Command keys are matched by `event.code` through `StarHermit.loadBindings(defaults)`; Help shows the effective keys. A check/reveal binding on a letter key acts only when focus is off the board. No in-game rebinding UI. |
+| Leaderboards | No own-server boards; when signed in the results screen lists the top three of the platform board read with `StarHermit.leaderboard()` (nicknames, own row marked). |
+| Sessions, matchmaking, session invites, chat, replays, realtime rooms, voice | **Not used** — solo ruleset, and `server.js` is not a platform session script. |
+| Achievements | Local, in `localStorage` (`cwj:v1`); the game's server reports no platform achievements. |
+| Cloud save | **Used when signed in**: the store document is mirrored with `StarHermit.saveJSON` (2 s debounce) to `/api/v1/me/cloud-saves/game:<slug>`, flushed with keepalive on `pagehide`/hidden; remote wins on boot (`loadJSON`, version-validated) and the top bar reflects sync status. localStorage stays the offline cache. Without a token the game makes no StarHermit calls. |
 
 ## 13. Technical architecture
 
 - **Modules:** `rules.js` (pure, versioned `RULES_VERSION=1`), `content.js` (`CONTENT_VERSION=1`, deterministic generation with a 32-attempt seeded backtracking fill using minimum-remaining-values ordering; 8 hand-authored masks proven fillable by the validators), `audio.js`, `main.js` (everything DOM/Three/session), `server.js`.
 - **Determinism and replay:** command log = `[{type, …, id, at}]`; `buildEnvelope()` is the replay envelope; identical `(build, seed, commands)` yields identical `hashState`. The server re-derives Daily/Journey/Challenge defs from the id and compares seed, mode, size, cells, entry geometry, limits, par and multiplier (`contentMatches`).
 - **Time:** elapsed = accrued + `performance.now()` since the last resume; paused and hidden time is excluded; `at` is stamped on every command. Par/limits are content-authored in ms.
-- **Persistence:** one versioned localStorage document `cwj:v1`; unknown versions are discarded; server boards mirrored to `data/leaderboard.json` (debounced 250 ms), each board trimmed to 200 entries.
+- **Persistence:** one versioned localStorage document `cwj:v1`; unknown versions are discarded. (`server.js`'s unused dev boards mirror to `data/leaderboard.json`.)
 - **Performance:** DOM board of at most 81 buttons re-rendered per command; diorama ≤ ~110 meshes, pixel ratio capped per preset, render loop skipped while hidden; the scene is rebuilt only when theme, seed, scenery detail, fireflies or reflections change. No per-frame allocations in the loop besides Three internals.
 - **Resilience:** `js/diorama.js` is imported dynamically, so a WebGL or module-load failure hides the canvas and shows a one-line fallback message; the game is unaffected. Missing key art or results art hides itself (`onerror`). Missing/failed audio clips fall back to synthesis permanently for that clip.
-- **How the e2e drives the UI:** `tests/e2e.mjs` starts its own static server (stubbing `/api/v1/time` and `/api/v1/score`), launches Chrome via `playwright-core`, and clicks real controls: Settings (toggles High contrast and asserts `body.hc`), Graphics (asserts Auto resolves to Low on the software GPU, selects High, Ultra on desktop, Low and High again through `#set-quality` checking `data-gfx-preset`/`data-gfx-post`, overrides bloom off via `#gfx-bloom`, reloads and asserts both persisted, then picks Auto and asserts the override was cleared), Help, Play → Journey → page 1, clicks two cells and presses their letters, clicks Check and Reveal (asserts a `.revealed` cell), presses Esc and clicks Resume, then solves the grid cell-by-cell from the authored solution and asserts the results headline, breakdown rows, `journey.unlocked === 2` and `stats.wins === 1` in localStorage, then Home. Desktop 1280×800 and mobile 390×844 (touch, tray buttons); any console error, console warning or page error fails the run. `PORT` pins the embedded server's port.
+- **How the e2e drives the UI:** `tests/e2e.mjs` starts its own purely static server (standalone passes fail on any same-origin `/api` or `/ws` request; the signed-in pass stubs the platform API and `/api/v1/time`), launches Chrome via `playwright-core`, and clicks real controls: Settings (toggles High contrast and asserts `body.hc`), Graphics (asserts Auto resolves to Low on the software GPU, selects High, Ultra on desktop, Low and High again through `#set-quality` checking `data-gfx-preset`/`data-gfx-post`, overrides bloom off via `#gfx-bloom`, reloads and asserts both persisted, then picks Auto and asserts the override was cleared), Help, Play → Journey → page 1, clicks two cells and presses their letters, clicks Check and Reveal (asserts a `.revealed` cell), presses Esc and clicks Resume, then solves the grid cell-by-cell from the authored solution and asserts the results headline, breakdown rows, `journey.unlocked === 2` and `stats.wins === 1` in localStorage, then Home. Desktop 1280×800 and mobile 390×844 (touch, tray buttons); any console error, console warning or page error fails the run. `PORT` pins the embedded server's port.
 
 ## 14. Testing and acceptance criteria
 
-`npm test` (`node --test tests/*.test.mjs`, 58 tests):
+`npm test` (`node --test tests/*.test.mjs`):
+- **platform:** `tests/platform.test.mjs` loads the SDK and `js/platform.js` against a stubbed `window`/`fetch`/launch hash: token read and fragment strip, profile nickname, `game:<slug>` cloud-save round-trip, debounced settings patch, binding overrides, invite link, platform board rows, and zero fetches standalone.
 - **gfx:** `detectPreset` on sample GPU strings and the mobile cap; `resolve` for Auto, explicit presets, overrides, invalid tiers and render-scale clamping; every preset defines every category; choosing a preset clears overrides; `describe`; Graphics strings complete in all nine locales and `pickLocale` fallbacks.
 - **rules:** stream determinism and bounds; createGame validation; every command's success and each rejection reason; scoring once per letter; check confirm/flag/cost; reveal lock/cost/streak break; give up; not-active after terminal; win with and without time bonus; time-limit via `at`; mistake-limit; duplicate/out-of-order ids; streak growth and reset; crossings completing two words; `getHint` preference; serialization round-trip; replay hash stability, rejection cases and tamper detection; snapshot migration sanity; `compareResults` order; fuzzed malformed commands never throw; random valid playthroughs always terminate.
 - **content:** bank buckets and clues; masks square and fully covered; `generateGrid` deterministic, consistent, fills every pattern; 40 valid Journey defs; Learn tutorial ordered; Daily stable per date and weekday-driven; Practice tiers; five valid challenges; `validateAll`; `validateDef` catches structural faults; generated defs winnable through the engine; five complete themes.
 
-`npm run test:e2e`: the playthrough in §13, both viewports, zero console errors.
+`npm run test:e2e`: the playthrough in §13, both viewports, zero console errors and no StarHermit request; then a signed-in pass per viewport with the platform API stubbed: nickname in the top bar and Profile card, `game:crossword-journey` save loaded, fragment stripped, platform setting (high contrast) applied, Invite a friend toast on-screen, Help shows a platform key binding.
 
 QA bar (checkable): the first-time player is taught by Learn's banners or can read Help in one click; every implemented feature (all five modes, all assists, pause, settings, help, results actions) is reachable by clicking visible controls; no console errors or warnings at 1280×800 or 390×844; the board, current clue, and every primary button are fully visible at both sizes and in landscape 844×390; keyboard-only play completes a page; screen-reader users get the board summary and every error.
 
@@ -249,7 +257,7 @@ QA bar (checkable): the first-time player is taught by Learn's banners or can re
 
 - No localization; English only (§10), except the Settings screen's Graphics section.
 - Mobile letter entry relies on a hardware/Bluetooth keyboard or the browser's key events: cells are `<button>`s, so the on-screen keyboard does not open on tap. Assists and navigation work by touch; typing does not on a phone without a keyboard.
-- The own-server `/api/v1/leaderboard` is still never read; ranked results show the submit rank, and when hosted the platform board (read via `GET /api/v1/games/{slug}` → leaderboardId → entries, nicknames resolved) renders its top 3 on the results screen.
+- Ranked results are kept on the device; when hosted the platform board (read via `GET /api/v1/games/{slug}` → leaderboardId → entries, nicknames resolved) renders its top 3 on the results screen.
 - `assists.undo` in content defs is unused; there is no undo command (Backspace clears).
 - Journey wins post to a single shared `journey` board regardless of page, so a page-40 score and a page-1 score compete.
 - Achievements and journey progress live only in the browser's localStorage; clearing site data resets them.

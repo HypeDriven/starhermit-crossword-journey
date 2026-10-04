@@ -469,3 +469,12 @@ body.gfx-detailed:not(.hc) .cell:not(.void):not(.selected):not(.tutorial-focus) 
 body.gfx-detailed:not(.hc) .rail-block,
 body.gfx-detailed:not(.hc) .menu-card,
 body.gfx-detailed:not(.hc) .results-card { box-shadow: 0 6px 18px rgba(10, 14, 22, 0.22); }
+
+/* Narrow portrait: action buttons wrap instead of running off-screen. */
+.tray-actions { flex-wrap: wrap; }
+.tray-actions .act-btn { min-width: 0; }
+@media (max-width: 520px) { .tray-actions .act-btn { flex: 1 1 28%; } }
+
+.menu-platform { display: flex; flex-wrap: wrap; gap: 12px; justify-content: center; }
+.menu-platform[hidden], .menu-platform [hidden] { display: none; }
+.toast { max-width: calc(100vw - 24px - var(--sar)); overflow-wrap: anywhere; }
