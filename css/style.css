@@ -69,6 +69,13 @@ p, li, .menu-card-sub, .clue { max-width: 70ch; }
 
 /* --- App shell --------------------------------------------------------------*/
 #app { position: relative; z-index: 2; min-height: 100%; display: flex; flex-direction: column; }
+/* Large screens: the whole DOM UI (#app, incl. pause overlay and toasts) and the FPS meter zoom by --ui-scale
+   (ui-scale.js; 1 up to 1600x1000); vh/vw lengths inside them are divided by it. The decorative 3D canvas
+   (#scene) is fixed full-viewport and not zoomed. */
+#app, .fps-meter { zoom: var(--ui-scale, 1); }
+/* Large screens: #app is exactly one viewport tall so long clue lists scroll inside the rail instead of
+   growing the page and pushing the centred board below the fold. */
+html.ui-scaled #app { height: 100%; }
 
 .topbar {
   display: flex; align-items: center; gap: 14px;
@@ -142,7 +149,7 @@ p, li, .menu-card-sub, .clue { max-width: 70ch; }
 
 .mode-list {
   display: flex; flex-direction: column; gap: 10px;
-  width: min(620px, 100%); max-height: 60vh; overflow-y: auto;
+  width: min(620px, 100%); max-height: calc(60vh / var(--ui-scale, 1)); overflow-y: auto;
 }
 .mode-item {
   text-align: left; padding: 14px 16px; min-height: 44px;
@@ -196,6 +203,7 @@ progress { flex: 1; height: 14px; accent-color: var(--ok); }
   align-items: center; justify-content: center; gap: 10px; min-width: 0;
 }
 .board {
+  --board-w: min(calc(92vw / var(--ui-scale, 1)), var(--board-cap, 320px));
   display: grid; gap: 2px;
   background: var(--tile-edge);
   padding: 6px; border-radius: 12px;
@@ -212,6 +220,10 @@ progress { flex: 1; height: 14px; accent-color: var(--ok); }
   display: flex; align-items: center; justify-content: center;
 }
 .cell.void { background: transparent; pointer-events: none; visibility: hidden; }
+/* Large screens (ui-scale.js adds html.ui-scaled above 1600x1000): the per-column px cap lifts so the board
+   is at least 56% of the viewport height (still capped by 62vh), and letters grow with the cells. */
+html.ui-scaled .board { --board-w: min(calc(92vw / var(--ui-scale, 1)), max(var(--board-cap, 320px), calc(56vh / var(--ui-scale, 1)))); }
+html.ui-scaled .cell { font-size: max(1.3rem, calc(min(var(--board-w), calc(62vh / var(--ui-scale, 1))) / var(--cols, 9) * 0.4)); }
 .cell .cell-num {
   position: absolute; top: 2px; left: 4px;
   font-size: 0.6rem; font-weight: 600; color: var(--muted);
@@ -265,7 +277,7 @@ body.left-handed .screen-play { flex-direction: row-reverse; }
   width: min(560px, 100%);
 }
 .results-art {
-  display: block; width: 100%; height: auto; aspect-ratio: 16 / 9; max-height: 32vh;
+  display: block; width: 100%; height: auto; aspect-ratio: 16 / 9; max-height: calc(32vh / var(--ui-scale, 1));
   object-fit: cover; border-radius: 10px; margin-bottom: 14px;
 }
 .results-art[hidden] { display: none; }
@@ -282,7 +294,7 @@ body.left-handed .screen-play { flex-direction: row-reverse; }
 }
 
 /* --- Settings / help ---------------------------------------------------------*/
-.settings-form { display: flex; flex-direction: column; gap: 14px; width: min(520px, 100%); max-height: 60vh; overflow-y: auto; }
+.settings-form { display: flex; flex-direction: column; gap: 14px; width: min(520px, 100%); max-height: calc(60vh / var(--ui-scale, 1)); overflow-y: auto; }
 .settings-form fieldset {
   background: var(--panel); border: 1px solid var(--tile-edge);
   border-radius: 12px; padding: 12px 16px;
@@ -295,7 +307,7 @@ body.left-handed .screen-play { flex-direction: row-reverse; }
 .settings-form select { min-height: 44px; font-size: 1rem; border-radius: 8px; padding: 4px 8px; }
 .settings-form input[type="checkbox"] { width: 24px; height: 24px; }
 
-.help-cards { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 12px; width: min(900px, 100%); max-height: 60vh; overflow-y: auto; }
+.help-cards { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 12px; width: min(900px, 100%); max-height: calc(60vh / var(--ui-scale, 1)); overflow-y: auto; }
 .help-card { background: var(--panel); border-radius: 12px; padding: 14px 16px; }
 .help-card h3 { font-size: 1rem; margin-bottom: 6px; color: var(--accent); }
 .help-card p { font-size: 0.9rem; }
@@ -409,7 +421,7 @@ body.reduced-motion * { animation: none !important; transition: none !important;
 }
 
 /* Current clue beside the board on compact layouts (rails are drawers there) */
-.board-clue { display: none; margin: 0 0 6px; font-weight: 600; text-align: center; max-width: 92vw; }
+.board-clue { display: none; margin: 0 0 6px; font-weight: 600; text-align: center; max-width: calc(92vw / var(--ui-scale, 1)); }
 @media (max-width: 1023px) {
   .board-clue { display: block; }
   .rail-right .rail-block:first-child { display: none; }
@@ -477,4 +489,4 @@ body.gfx-detailed:not(.hc) .results-card { box-shadow: 0 6px 18px rgba(10, 14, 2
 
 .menu-platform { display: flex; flex-wrap: wrap; gap: 12px; justify-content: center; }
 .menu-platform[hidden], .menu-platform [hidden] { display: none; }
-.toast { max-width: calc(100vw - 24px - var(--sar)); overflow-wrap: anywhere; }
+.toast { max-width: calc(100vw / var(--ui-scale, 1) - 24px - var(--sar)); overflow-wrap: anywhere; }

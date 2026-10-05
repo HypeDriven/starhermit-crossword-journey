@@ -10,6 +10,7 @@
 | Path | Role |
 |---|---|
 | `index.html` | Single page: title, mode select, play, results, settings, help screens, pause overlay, mobile tray, toasts, live regions. |
+| `ui-scale.js` | Shared large-screen UI scale helper (canonical copy in the games tools folder; do not edit here). |
 | `css/style.css` | Layout (three rails / drawers / thumb tray), themes via CSS variables, high-contrast, CVD, reduced-motion, large-text, left-handed. |
 | `js/main.js` | Client: persistence, settings (including the Graphics section), platform sync, diorama wiring, session/state machine, board render, input, tutorial, modes, results, pause/help wiring. |
 | `js/diorama.js` | Decorative Three.js papercraft diorama (loaded lazily): scene build, lighting, IBL, post-processing chain, adaptive resolution, FPS readout, live graphics settings. |
@@ -124,6 +125,7 @@ State machine (`session.phase`, `transition()`): `boot → title ⇄ modes → a
 
 Layouts (`style.css`):
 - **Wide desktop ≥ 1024 px:** three rails — left (objective, progress bar, time/score/streak, scrolling clue lists), centre board (`min(92vw, cols·56px)`, max 62vh), right (current clue, action buttons). Tray hidden. Key art 560 px wide on the title screen.
+- **Large screens (above 1600×1000):** `ui-scale.js` sets `--ui-scale` (the smaller of width/1600 and height/1000, capped at 2.5; 2560×1440 → 1.44, 3840×2160 → 2.16) and adds `html.ui-scaled`; `#app` (all screens, the pause overlay, toasts) and the FPS meter are CSS-`zoom`ed by it, with vh/vw lengths inside divided by it. On large screens `#app` is exactly one viewport tall (long clue lists scroll inside the rail), the board's per-column cap lifts to 56vh (still max 62vh) and letters grow with the cells; the decorative 3D canvas is not zoomed.
 - **Compact ≤ 1023 px:** rails become drawers with a toggle button ("Objective & clues ▾", "Clue & actions ▾"), collapsed by default; the board is ordered first. Cells 40 px minimum.
 - **Portrait mobile ≤ 700 px:** top bar drops the status text, clue list capped at 30vh, sticky bottom tray (Check, Reveal, Across ⇄, Pause) padded by `safe-area-inset-bottom`.
 - **Landscape mobile ≤ 500 px tall:** rails return side-by-side at 200 px, 44 px cells, 44 px top bar, key art hidden so Play is on screen.

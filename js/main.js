@@ -607,8 +607,12 @@ function buildBoard() {
   const board = $('board');
   board.innerHTML = '';
   board.style.gridTemplateColumns = `repeat(${d.cols}, minmax(0, 1fr))`;
-  board.style.width = `min(92vw, ${Math.max(320, d.cols * 56)}px)`;
-  board.style.maxWidth = '62vh';
+  // Width comes from --board-w in style.css (92vw, capped at ~56 px per column; on large screens the
+  // cap lifts to 56vh so the board fills the space). vw/vh there are divided by --ui-scale.
+  board.style.setProperty('--cols', String(d.cols));
+  board.style.setProperty('--board-cap', `${Math.max(320, d.cols * 56)}px`);
+  board.style.width = 'var(--board-w)';
+  board.style.maxWidth = 'calc(62vh / var(--ui-scale, 1))';
   cellButtons = new Array(d.rows * d.cols).fill(null);
   cellNumbers = new Map();
   for (const e of d.entries) {
