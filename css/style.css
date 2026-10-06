@@ -73,9 +73,9 @@ p, li, .menu-card-sub, .clue { max-width: 70ch; }
    (ui-scale.js; 1 up to 1600x1000); vh/vw lengths inside them are divided by it. The decorative 3D canvas
    (#scene) is fixed full-viewport and not zoomed. */
 #app, .fps-meter { zoom: var(--ui-scale, 1); }
-/* Large screens: #app is exactly one viewport tall so long clue lists scroll inside the rail instead of
-   growing the page and pushing the centred board below the fold. */
-html.ui-scaled #app { height: 100%; }
+/* #app is exactly one viewport tall at every size, so long clue lists scroll inside the rail instead of
+   growing the page and pushing the centred board below the fold; menu screens scroll inside themselves. */
+#app { height: 100%; }
 
 .topbar {
   display: flex; align-items: center; gap: 14px;
@@ -105,9 +105,12 @@ html.ui-scaled #app { height: 100%; }
 /* --- Menu-style screens (title, modes, results, settings, help) -------------*/
 .screen-menu {
   flex-direction: column; align-items: center; justify-content: center;
+  justify-content: safe center;
   gap: 18px; padding: 24px calc(16px + var(--sar)) calc(24px + var(--sab)) calc(16px + var(--sal));
   overflow-y: auto;
 }
+/* Every menu item keeps its content height (flex column children would otherwise shrink and overlap). */
+.screen-menu > *, .mode-list > * { flex-shrink: 0; }
 .screen-heading { font-size: 1.6rem; color: var(--paper); text-align: center; max-width: 70ch; text-shadow: 0 1px 10px rgba(10, 14, 22, 0.65); }
 .lede { color: #e6ebf2; text-align: center; text-shadow: 0 1px 8px rgba(10, 14, 22, 0.6); }
 /* Headings and the lede sit on a soft dark backing so they stay legible over the bright diorama. */
@@ -122,9 +125,15 @@ html.ui-scaled #app { height: 100%; }
   border-radius: 14px; object-fit: cover;
   box-shadow: 0 8px 24px rgba(0, 0, 0, 0.45);
 }
+/* The key art is the one flexible piece of the title: it gives up height (cropped, never below 96px) so
+   the menu and the Sign in / Invite buttons stay above the fold on phones. */
+.screen-menu > .title-art { flex-shrink: 1; min-height: 96px; }
 .title-art[hidden] { display: none; }
 @media (max-height: 640px) { .title-art { width: min(360px, 100%); } }
-@media (max-height: 500px) and (orientation: landscape) { .title-art { display: none; } }
+@media (max-height: 500px) and (orientation: landscape) {
+  .title-art { display: none; }
+  .screen-menu { gap: 10px; padding-top: 12px; padding-bottom: calc(12px + var(--sab)); }
+}
 
 .menu-primary { display: flex; gap: 12px; }
 .big-btn {
@@ -378,7 +387,7 @@ body.reduced-motion * { animation: none !important; transition: none !important;
   }
   .rail .rail-body { display: flex; flex-direction: column; gap: 12px; }
   .rail.collapsed .rail-body { display: none; }
-  .board-region { order: -1; }
+  .board-region { order: -1; flex: 1 0 auto; } /* the play screen scrolls; the board never overlaps the toggles */
   .cell { min-width: 40px; min-height: 40px; }
 }
 

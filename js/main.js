@@ -184,12 +184,13 @@ const ACHIEVEMENTS = {
   'long-term-goal': { name: 'Seasoned Traveler', desc: 'Win 10 rounds in total.' },
 };
 
-function unlockAchievement(id) {
+// quiet: the results card already lists the unlock as a chip, so no toast over it.
+function unlockAchievement(id, { quiet = false } = {}) {
   if (!ACHIEVEMENTS[id] || store.achievements[id]) return;
   store.achievements[id] = Date.now();
   saveStore();
   audio.play('achievement');
-  toast(`Achievement unlocked: ${ACHIEVEMENTS[id].name}`);
+  if (!quiet) toast(`Achievement unlocked: ${ACHIEVEMENTS[id].name}`);
   session.newAchievements.push(id);
 }
 
@@ -382,6 +383,8 @@ function endRound() {
   // Verify locally: replay our own log before trusting the result.
   const envelope = buildEnvelope();
   const check = R.replay(envelope);
+  // In-play toasts (word complete…) would sit over the results heading on phones.
+  $('toasts').replaceChildren();
   if (!check.ok || check.finalHash !== R.hashState(st)) {
     console.error('replay verification failed', check);
     toast('Local replay verification failed — score will not be submitted.');
@@ -405,6 +408,7 @@ function buildEnvelope() {
 function applyRoundOutcome(st) {
   const d = session.def;
   const won = st.status === 'won';
+  const quiet = { quiet: true };
   if (won) {
     store.stats.wins++;
     store.stats.wordsCompleted += st.wordsDone;
@@ -412,11 +416,11 @@ function applyRoundOutcome(st) {
       const day = d.id.replace('daily-', '');
       if (!store.stats.dailyDays.includes(day)) store.stats.dailyDays.push(day);
     }
-    unlockAchievement('first-completion');
-    if (st.bestStreak >= 5) unlockAchievement('streak-5');
-    if (d.mult >= 1.5) unlockAchievement('hard-milestone');
-    if (d.mode === 'journey' && d.mechanics.includes('mastery')) unlockAchievement('mechanic-mastery');
-    if (store.stats.wins >= 10) unlockAchievement('long-term-goal');
+    unlockAchievement('first-completion', quiet);
+    if (st.bestStreak >= 5) unlockAchievement('streak-5', quiet);
+    if (d.mult >= 1.5) unlockAchievement('hard-milestone', quiet);
+    if (d.mode === 'journey' && d.mechanics.includes('mastery')) unlockAchievement('mechanic-mastery', quiet);
+    if (store.stats.wins >= 10) unlockAchievement('long-term-goal', quiet);
     if (d.mode === 'journey') {
       const n = Number(d.id.replace('journey-', ''));
       const stars = 1 + (st.checksUsed + st.revealsUsed === 0 ? 1 : 0) + (d.par.timeMs && st.elapsedMs < d.par.timeMs ? 1 : 0);
