@@ -218,7 +218,7 @@ All platform I/O goes through `starhermit-sdk.js` (an unmodified copy of `tools/
 | Leaderboards | No own-server boards; when signed in the results screen lists the top three of the platform board read with `StarHermit.leaderboard()` (nicknames, own row marked). |
 | Sessions, matchmaking, session invites, chat, replays, realtime rooms, voice | **Not used** — solo ruleset, and `server.js` is not a platform session script. |
 | Achievements | Local, in `localStorage` (`cwj:v1`); the game's server reports no platform achievements. |
-| Cloud save | **Used when signed in**: the store document is mirrored with `StarHermit.saveJSON` (2 s debounce) to `/api/v1/me/cloud-saves/game:<slug>`, flushed with keepalive on `pagehide`/hidden; remote wins on boot (`loadJSON`, version-validated) and the top bar reflects sync status. localStorage stays the offline cache. Without a token the game makes no StarHermit calls. |
+| Cloud save | **Used when signed in**: the store document is mirrored with `StarHermit.saveJSON` (2 s debounce) to `/api/v1/me/cloud-saves/game:<slug>`, flushed with keepalive on `pagehide`/hidden; remote wins on boot (`loadJSON`, version-validated; nothing is mirrored until that load resolves, then an empty slot is seeded only with real local progress) and the top bar reflects sync status. localStorage stays the offline cache. Without a token the game makes no StarHermit calls. |
 
 ## 13. Technical architecture
 

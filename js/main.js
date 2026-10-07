@@ -72,12 +72,23 @@ try {
   }
 } catch { /* corrupted store: start fresh */ }
 
+// Hosted: no cloud mirror until loadCloud() has resolved. A saveJSON queued
+// before then (boot applySettings) would stay pending in the SDK and could be
+// PUT (debounce or pagehide flush) over a newer cloud save.
+let cloudReady = false;
+
+function hasProgress(st) {
+  const j = st.journey || {}, s = st.stats || {};
+  return j.unlocked > 1 || Object.keys(j.stars || {}).length > 0 ||
+    Object.keys(st.achievements || {}).length > 0 || s.wins > 0 || s.wordsCompleted > 0;
+}
+
 function saveStore() {
   try { localStorage.setItem(STORE_KEY, JSON.stringify(store)); }
   catch { /* storage full/blocked: non-fatal */ }
   // Mirror the store document to the platform cloud slot when hosted.
   try {
-    if (platform.hosted) platform.saveCloud(JSON.stringify(store));
+    if (platform.hosted && cloudReady) platform.saveCloud(JSON.stringify(store));
   } catch { /* mirror errors never break saves */ }
 }
 
@@ -1741,10 +1752,11 @@ function wireMenus() {
 function syncFromPlatform() {
   if (!platform.hosted) return;
   platform.fetchProfile().then(() => { updateTopbarStatus(); refreshTitle(); }).catch(() => {});
+  cloudReady = false;
   platform.loadCloud().then((remoteRaw) => {
-    if (!remoteRaw) return;
+    cloudReady = true;
     try {
-      const parsed = JSON.parse(remoteRaw);
+      const parsed = remoteRaw ? JSON.parse(remoteRaw) : null;
       if (parsed && parsed.v === 1) {
         store = { ...structuredClone(DEFAULT_STORE), ...parsed,
           settings: { ...DEFAULT_STORE.settings, ...(parsed.settings || {}) } };
@@ -1752,8 +1764,11 @@ function syncFromPlatform() {
         applySettings();
         applyGraphics();
         refreshTitle();
+        return;
       }
     } catch { /* corrupt remote: keep local */ }
+    // Empty (or unusable) slot: seed it with local progress, never a fresh doc.
+    if (hasProgress(store)) saveStore();
   }).catch(() => {}).then(() => platform.getSettings()).then((remote) => {
     if (applyRemoteSettings(remote)) { applySettings(); applyGraphics(); }
     updateTopbarStatus();
