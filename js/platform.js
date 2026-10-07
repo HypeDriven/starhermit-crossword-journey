@@ -4,7 +4,7 @@
 // talks to the API; this adapter keeps the game's API — profile nickname, the
 // cloud-save mirror of the versioned store document (remote wins on boot;
 // debounced saves with a pagehide flush; sync status), the settings KV,
-// sign-in, invite link, key bindings and the read-only platform leaderboard.
+// sign-in, invite link, key bindings and the `high-score` leaderboard (post + read).
 // main.js calls the own-server GET /api/v1/time with headers() only when
 // signed in. Offline play is unchanged: no token → localStorage only and
 // zero StarHermit calls.
@@ -138,12 +138,25 @@ export const platform = {
     }
   },
 
-  /* Platform leaderboard (read-only; clients never submit): the game's first
-   * board, entries resolved to nicknames, own row marked. */
+  /* Post a finished ranked round to the `high-score` board through the game's
+   * score-script.js (StarHermit.submitScores) → { posted, rank }. */
+  submitScore(total) {
+    const s = sdk();
+    if (!s || !this.hosted) return Promise.resolve({ posted: false, rank: null });
+    return s.submitScores({ 'high-score': total }).then((keys) => {
+      if (!keys || keys.indexOf('high-score') < 0) return { posted: false, rank: null };
+      return s.leaderboard('high-score', { pageSize: 100 }).then((r) => {
+        const me = ((r && r.items) || []).find((i) => i.userId === this.userId);
+        return { posted: true, rank: me ? me.rank : null };
+      }, () => ({ posted: true, rank: null }));
+    });
+  },
+
+  /* The `high-score` board, entries resolved to nicknames, own row marked. */
   fetchLeaderboard() {
     const s = sdk();
     if (!s || !this.hosted) return Promise.resolve(null);
-    return s.leaderboard(null, { pageSize: 20 }).then((r) => {
+    return s.leaderboard('high-score', { pageSize: 20 }).then((r) => {
       if (!r || !r.board) return null;
       return Promise.all((r.items || []).slice(0, 20).map((e) => {
         const uid = String(e.userId != null ? e.userId : e.playerId || '');

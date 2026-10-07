@@ -19,6 +19,7 @@
 | `js/rules.js` | Pure deterministic rules engine: `createGame`, `applyCommand`, legality queries, scoring, hashing, `replay`, `compareResults`. Shared by browser and server. |
 | `js/content.js` | Versioned content: 5 themes, 353-word original bank with clues, 8 grid masks, seeded backtracking fill generator, Journey/Learn/Daily/Practice/Challenge defs, validators. |
 | `js/audio.js` | WebAudio: three buses, authored Opus one-shots with synthesized fallbacks, procedural ambience pad and pentatonic music loop. |
+| `score-script.js` | StarHermit platform script (`server=score-script.js`): range-checks a finished ranked round's total and posts it to the `high-score` leaderboard (canonical copy in the games repo's `tools/score-script.js`). |
 | `server.js` | Dev static host. Its legacy `/api/v1/score` and `/api/v1/leaderboard` routes are no longer called by the client; `/api/v1/time` is read only when signed in. |
 | `vendor/three.module.js` | Three.js r160 (decorative scene only), mapped as `three` by the import map in `index.html`. |
 | `vendor/addons/` | Same-revision (0.160.1) three.js addons: EffectComposer, RenderPass, ShaderPass, OutputPass, GTAOPass, UnrealBloomPass, SMAAPass, FXAA, RoomEnvironment and their shader/math imports; mapped as `three/addons/`. |
@@ -27,7 +28,7 @@
 | `coverart.png`, `icon.png`, `favicon.svg` | Platform cover (1200×675), icon, tab icon. |
 | `tests/rules.test.mjs`, `tests/content.test.mjs`, `tests/e2e.mjs` | 50 unit tests (`npm test`) and the Playwright playthrough (`npm run test:e2e`). |
 | `tools/smoke.mjs` | Dev-only server smoke test (boots server, submits a replay envelope, reads a board). Not shipped. |
-| `starhermit.txt`, `LICENSE.md` | Platform manifest (`server=server.js`, `cover=coverart.png`); PolyForm Noncommercial 1.0.0. |
+| `starhermit.txt`, `LICENSE.md` | Platform manifest (`server=score-script.js`, `cover=coverart.png`); PolyForm Noncommercial 1.0.0. |
 
 ## 2. Vision and design pillars
 
@@ -202,7 +203,7 @@ The shipped build is **English only**: `<html lang="en">`, strings hard-coded in
 
 ## 12. StarHermit integration
 
-Manifest: `name=Crossword Journey`, `launch=index.html`, `server=server.js`, `cover`, plus one `control.<action>=<Code>[+<Code>] | <Label>` line per command key: `pause`=Escape, `up`/`down`/`left`/`right`=arrows, `nextClue`=Enter+Tab, `toggleDir`=Space, `clear`=Backspace+Delete, `checkWord`=KeyC, `checkGrid`=KeyG, `reveal`=KeyH (letters A–Z always type and are not bindable).
+Manifest: `name=Crossword Journey`, `launch=index.html`, `server=score-script.js`, `cover`, plus one `control.<action>=<Code>[+<Code>] | <Label>` line per command key: `pause`=Escape, `up`/`down`/`left`/`right`=arrows, `nextClue`=Enter+Tab, `toggleDir`=Space, `clear`=Backspace+Delete, `checkWord`=KeyC, `checkGrid`=KeyG, `reveal`=KeyH (letters A–Z always type and are not bindable).
 
 All platform I/O goes through `starhermit-sdk.js` (an unmodified copy of `tools/starhermit-sdk.js`, loaded as a classic script before the `js/main.js` module); `js/platform.js` is a thin adapter over `window.StarHermit` that keeps the game's `platform` API.
 
@@ -215,8 +216,8 @@ All platform I/O goes through `starhermit-sdk.js` (an unmodified copy of `tools/
 | Settings KV | Every preference in `store.settings` (theme, three volumes, reduced motion, high contrast, colour-blind aid, large text, left-handed, haptics, graphics object) is mirrored with `patchSettings` (400 ms debounce) when changed; on boot `getSettings()` is applied over the local values (platform wins). |
 | Invite link | When signed in the title shows "Invite a friend": copies `StarHermit.inviteLink()` and confirms with a toast (shows the link if copying is blocked). |
 | Controls | Command keys are matched by `event.code` through `StarHermit.loadBindings(defaults)`; Help shows the effective keys. A check/reveal binding on a letter key acts only when focus is off the board. No in-game rebinding UI. |
-| Leaderboards | No own-server boards; when signed in the results screen lists the top three of the platform board read with `StarHermit.leaderboard()` (nicknames, own row marked). |
-| Sessions, matchmaking, session invites, chat, replays, realtime rooms, voice | **Not used** — solo ruleset, and `server.js` is not a platform session script. |
+| Leaderboards | One board, `high-score` (integer, higher is better, 0–100,000). When signed in, every finished ranked round (Daily Challenge, Challenges) whose local replay verifies posts its total (floored at 0) through `StarHermit.submitScores` (a practice session whose `score-script.js` posts it), and the results screen shows "Leaderboard rank: #N" (or posted / not posted), localized in the nine locales. Standalone play posts nothing and shows no line. No own-server boards. |
+| Sessions, matchmaking, session invites, chat, replays, realtime rooms, voice | **Not used** — solo ruleset; the only platform session is the short practice session that posts a score. |
 | Achievements | Local, in `localStorage` (`cwj:v1`); the game's server reports no platform achievements. |
 | Cloud save | **Used when signed in**: the store document is mirrored with `StarHermit.saveJSON` (2 s debounce) to `/api/v1/me/cloud-saves/game:<slug>`, flushed with keepalive on `pagehide`/hidden; remote wins on boot (`loadJSON`, version-validated; nothing is mirrored until that load resolves, then an empty slot is seeded only with real local progress) and the top bar reflects sync status. localStorage stays the offline cache. Without a token the game makes no StarHermit calls. |
 
@@ -260,7 +261,7 @@ QA bar (checkable): the first-time player is taught by Learn's banners or can re
 
 - No localization; English only (§10), except the Settings screen's Graphics section.
 - Mobile letter entry relies on a hardware/Bluetooth keyboard or the browser's key events: cells are `<button>`s, so the on-screen keyboard does not open on tap. Assists and navigation work by touch; typing does not on a phone without a keyboard.
-- Ranked results are kept on the device; when hosted the platform board (read via `GET /api/v1/games/{slug}` → leaderboardId → entries, nicknames resolved) renders its top 3 on the results screen.
+- Ranked results are kept on the device; when hosted they also post to the `high-score` board and the results screen shows the player's rank.
 - `assists.undo` in content defs is unused; there is no undo command (Backspace clears).
 - Journey wins post to a single shared `journey` board regardless of page, so a page-40 score and a page-1 score compete.
 - Achievements and journey progress live only in the browser's localStorage; clearing site data resets them.

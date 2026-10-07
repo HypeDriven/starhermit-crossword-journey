@@ -31,7 +31,7 @@ async function boot(hash) {
       return json({ settings: store.settings });
     }
     if (url.endsWith(`/api/v1/games/${SLUG}/controls`)) return json({ actions: [{ action: 'reveal', codes: ['F2'] }] });
-    if (url.endsWith(`/api/v1/games/${SLUG}/leaderboards`)) return json([{ id: 'lb1', key: 'score' }]);
+    if (url.endsWith(`/api/v1/games/${SLUG}/leaderboards`)) return json([{ id: 'lb1', key: 'high-score' }]);
     if (url.includes('/api/v1/leaderboards/lb1/entries')) return json({ items: [{ userId: 'u-12345678', score: 900 }] });
     return new Response('', { status: 404 });
   };
