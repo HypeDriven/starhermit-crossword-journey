@@ -38,7 +38,7 @@ function applyVolumes() {
 function blip(bus, { freq = 440, dur = 0.08, type = 'triangle', gain = 0.5, slide = 0 }) {
   if (!ensureCtx()) return;
   const t = ctx.currentTime;
-  const osc = ctx.createOscillator();
+  const osc = (globalThis.GameOptions ? globalThis.GameOptions.trackSource(ctx.createOscillator(), bus) : ctx.createOscillator());
   const g = ctx.createGain();
   osc.type = type;
   osc.frequency.setValueAtTime(freq, t);
@@ -131,7 +131,7 @@ function loadSample(name) {
 function playSample(name) {
   const entry = sampleCache.get(name);
   if (entry instanceof AudioBuffer) {
-    const src = ctx.createBufferSource();
+    const src = (globalThis.GameOptions ? globalThis.GameOptions.trackSource(ctx.createBufferSource(), name) : ctx.createBufferSource());
     src.buffer = entry;
     src.connect(buses.effects);
     src.start();
@@ -162,7 +162,7 @@ function startAmbience() {
     v = v * 0.98 + (Math.random() * 2 - 1) * 0.02; // brown-ish
     data[i] = v * 3;
   }
-  const src = ctx.createBufferSource();
+  const src = (globalThis.GameOptions ? globalThis.GameOptions.trackSource(ctx.createBufferSource(), null) : ctx.createBufferSource());
   src.buffer = buf;
   src.loop = true;
   const filt = ctx.createBiquadFilter();

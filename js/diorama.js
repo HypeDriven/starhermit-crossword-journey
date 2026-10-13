@@ -727,13 +727,13 @@ export function createDiorama(canvas, { isReducedMotion, mobile = false }) {
     }
     if (d.scene.fog) d.scene.fog.color.copy(d.composer ? d.fogHdr : d.fogDisplay);
     if (d.composer) {
-      try { d.composer.render(dt / 1000); return; } catch {
+      try { (globalThis.GameOptions ? globalThis.GameOptions.draw(d.composer.renderer, () => d.composer.render(dt / 1000)) : d.composer.render(dt / 1000)); return; } catch {
         d.postFailed = true;
         d.composer = null;
         d.onChange?.();
       }
     }
-    d.renderer.render(d.scene, d.camera);
+    (globalThis.GameOptions ? globalThis.GameOptions.draw(d.renderer, () => d.renderer.render(d.scene, d.camera)) : d.renderer.render(d.scene, d.camera));
   };
 
   return d;
