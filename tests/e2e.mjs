@@ -23,6 +23,7 @@ import { readFile } from 'node:fs/promises';
 import { extname, join, normalize, sep } from 'node:path';
 import { chromium } from 'playwright-core';
 import { journeyStage } from '../js/content.js';
+import { stubStarHermit } from './starhermit-e2e.mjs';
 
 const ROOT = new URL('..', import.meta.url).pathname;
 const SHOT = (stage, vp) => `/tmp/crossword-journey-e2e-${stage}-${vp}.png`;
@@ -129,6 +130,8 @@ async function platformPass(vpName, viewport, hasTouch) {
     if (u.pathname.endsWith('/profile')) return json({ nickname: 'Pip Tester' });
     if (u.pathname.endsWith('/settings') && req.method() === 'GET') return json({ settings: { highContrast: true } });
     if (u.pathname.endsWith('/controls')) return json({ actions: [{ action: 'reveal', codes: ['F2'] }] });
+    // Cloud-save writes answer with the new ETag, as the platform does.
+    if (u.pathname.includes('/cloud-saves/') && req.method() === 'PUT') return json({ etag: '"v' + seen.length + '"' });
     return route.fulfill({ status: 204 });
   });
   await page.route((url) => url.pathname === '/api/v1/time', (route) => {
@@ -164,6 +167,86 @@ async function platformPass(vpName, viewport, hasTouch) {
     if (errors.length) {
       failures++;
       console.error(`[platform-${vpName}] PAGE ERRORS:\n` + errors.join('\n'));
+    }
+    await context.close();
+  }
+}
+
+// Language: Automatic resolves to the StarHermit account preference (fr-CA);
+// switching in Settings mid-round re-renders everything in place without
+// touching the round, saves ui.language, and Report a problem posts /reports.
+async function languagePass(vpName, viewport, hasTouch) {
+  const context = await browser.newContext({ viewport, hasTouch });
+  const page = await context.newPage();
+  const errors = [];
+  page.on('pageerror', (e) => errors.push(`pageerror: ${e.message}`));
+  page.on('console', (m) => {
+    if ((m.type() === 'error' || m.type() === 'warning') && !browserNoise.test(m.text())) errors.push(`console ${m.type()}: ${m.text()}`);
+  });
+  const b64u = (o) => Buffer.from(JSON.stringify(o)).toString('base64url');
+  const jwt = `${b64u({ alg: 'none' })}.${b64u({ sub: 'u-e2e-0002', game_scope: 'crossword-journey', exp: Math.floor(Date.now() / 1000) + 3600 })}.sig`;
+  const calls = await stubStarHermit(page, { preferredLanguage: 'fr-CA' });
+  const tag = `[language-${vpName}]`;
+  try {
+    await step(`${tag} Automatic follows the account preference; live switch mid-round; ui.language; report`, async () => {
+      await page.goto('about:blank');
+      await page.goto(`${BASE}/#game_token=${jwt}`, { waitUntil: 'load' });
+      await page.waitForFunction(() => document.documentElement.lang === 'fr-CA' && document.getElementById('btn-play').textContent === '▶ Jouer', null, { timeout: 10000 });
+      await page.click('#btn-play');
+      await page.waitForSelector('#screen-modes:not([hidden])');
+      await page.locator('#mode-list .mode-item', { hasText: 'Voyage' }).first().click();
+      await page.locator('#mode-list .mode-item', { hasText: 'Premier amarrage' }).first().click();
+      await page.waitForSelector('#screen-play:not([hidden])');
+      const objFr = await page.textContent('#objective');
+      if (!objFr.startsWith('Remplissez chaque case de « Premier amarrage ».')) throw new Error('objective not French: ' + objFr);
+      const i0 = def.entries[0].cells[0];
+      await page.locator(`#board .cell[data-index="${i0}"]`).click();
+      await page.keyboard.press(def.cells[i0].toLowerCase());
+      const before = await page.evaluate(() => [...document.querySelectorAll('#board .cell')].map((c) => c.textContent).join('|'));
+      await page.click('#nav-settings');
+      await page.waitForSelector('#screen-settings:not([hidden])');
+      const choice = page.locator('[data-game-language="choice"]');
+      await choice.waitFor({ state: 'attached', timeout: 5000 });
+      if ((await choice.count()) !== 1) throw new Error('expected exactly one language selector');
+      await choice.scrollIntoViewIfNeeded();
+      const auto = await choice.locator('option').first().textContent();
+      if (auto !== 'Automatique — Français (Canada)') throw new Error('Automatic label not resolved: ' + auto);
+      await choice.selectOption('it-IT');
+      await page.waitForFunction(() => document.documentElement.lang === 'it-IT'
+        && document.getElementById('settings-heading').textContent === 'Impostazioni'
+        && document.getElementById('objective').textContent.startsWith('Riempi ogni casella di «Primo ormeggio».')
+        && document.querySelector('#clue-lists .clue-dir-heading')?.textContent === 'Orizzontale');
+      await page.waitForFunction(() => /Salvato/.test(document.querySelector('[data-game-language="status"]')?.textContent || ''));
+      if (calls.settings['ui.language']?.choice !== 'it-IT') throw new Error('ui.language not saved: ' + JSON.stringify(calls.settings));
+      const report = page.locator('[data-game-report="title"]');
+      await report.scrollIntoViewIfNeeded();
+      await report.fill('Test report');
+      await page.locator('[data-game-report="send"]').click();
+      await page.waitForFunction(() => /Grazie/.test(document.querySelector('[data-game-report="status"]').textContent));
+      if (!calls.reports?.[0] || calls.reports[0].kind !== 'bug') throw new Error('report not posted');
+      const spill = await page.evaluate(() => {
+        const w = document.documentElement.clientWidth;
+        return [...document.querySelectorAll('#screen-settings select, #screen-settings input, #screen-settings button, #screen-settings textarea')]
+          .filter((n) => n.offsetParent && n.getBoundingClientRect().right > w + 1).map((n) => n.outerHTML.slice(0, 60));
+      });
+      if (spill.length) throw new Error('settings controls cut off: ' + spill.join(','));
+      await page.screenshot({ path: SHOT('language', vpName) });
+      await choice.selectOption('auto');
+      await page.waitForFunction(() => document.documentElement.lang === 'fr-CA' && document.getElementById('settings-heading').textContent === 'Paramètres');
+      await page.locator('#btn-settings-back').scrollIntoViewIfNeeded();
+      await page.click('#btn-settings-back');
+      await page.waitForSelector('#overlay-pause:not([hidden])');
+      if ((await page.textContent('#pause-heading')) !== 'En pause') throw new Error('pause overlay not French');
+      await page.click('#pause-resume');
+      await page.waitForSelector('#overlay-pause', { state: 'hidden' });
+      const after = await page.evaluate(() => [...document.querySelectorAll('#board .cell')].map((c) => c.textContent).join('|'));
+      if (after !== before) throw new Error('board changed during the language switch');
+      if (!(await page.textContent('#objective')).startsWith('Remplissez chaque case')) throw new Error('objective not re-rendered');
+    });
+  } finally {
+    if (errors.length) {
+      failures++;
+      console.error(`${tag} PAGE ERRORS:\n` + errors.join('\n'));
     }
     await context.close();
   }
@@ -321,6 +404,8 @@ try {
   await runPass('mobile', { width: 390, height: 844 }, true);
   await platformPass('desktop', { width: 1280, height: 800 }, false);
   await platformPass('mobile', { width: 390, height: 844 }, true);
+  await languagePass('desktop', { width: 1280, height: 800 }, false);
+  await languagePass('mobile', { width: 390, height: 844 }, true);
 } finally {
   await browser.close();
   server.close();

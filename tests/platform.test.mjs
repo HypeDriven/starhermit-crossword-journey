@@ -5,6 +5,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import vm from 'node:vm';
+import { mergeStoreDoc } from '../js/merge.js';
 
 const SDK_SRC = readFileSync(new URL('../starhermit-sdk.js', import.meta.url), 'utf8');
 const SLUG = 'crossword-journey';
@@ -16,14 +17,19 @@ test.afterEach(() => { globalThis.StarHermit?.signOut(); });
 
 async function boot(hash) {
   const calls = [];
-  const store = { save: null, settings: {} };
+  const store = { save: null, settings: {}, refuseNextPut: false };
   globalThis.fetch = async (url, init = {}) => {
     const method = init.method || 'GET';
     calls.push({ url, method, init });
     const json = (o) => new Response(JSON.stringify(o), { status: 200, headers: { 'Content-Type': 'application/json' } });
     if (url.endsWith('/api/v1/users/u-12345678/profile')) return json({ nickname: 'Pip' });
+    if (url.includes('/api/v1/me/cloud-saves/') && url.endsWith('/info')) {
+      return json(store.save ? { exists: true, etag: '"v' + calls.length + '"' } : { exists: false });
+    }
     if (url.includes('/api/v1/me/cloud-saves/')) {
-      if (method === 'PUT') { store.save = Buffer.from(JSON.parse(init.body).dataBase64, 'base64'); return new Response(null, { status: 204 }); }
+      // refuseNextPut: the next write loses to "another device" (412, conditional write refused).
+      if (method === 'PUT' && store.refuseNextPut) { store.refuseNextPut = false; return new Response(JSON.stringify({ error: 'precondition-failed' }), { status: 412, headers: { 'Content-Type': 'application/json' } }); }
+      if (method === 'PUT') { store.save = Buffer.from(JSON.parse(init.body).dataBase64, 'base64'); return json({ etag: '"v' + calls.length + '"' }); }
       return store.save ? new Response(store.save, { status: 200 }) : new Response('', { status: 404 });
     }
     if (url.endsWith(`/api/v1/games/${SLUG}/settings`)) {
@@ -104,4 +110,30 @@ test('standalone: no token means no fetch at all', async () => {
   assert.equal(await P.fetchLeaderboard(), null);
   assert.deepEqual(P.headers(), {});
   assert.equal(calls.length, 0);
+});
+
+test('save conflict: remote doc is reloaded, merged and saved again', async () => {
+  const { P, store } = await boot('#game_token=' + JWT);
+  P.init();
+  const base = { v: 1, settings: { theme: 'harbor' }, profile: { name: 'Guest' }, tutorialDone: false };
+  const other = { ...base, journey: { unlocked: 5, stars: { 2: 3, 4: 1 } }, achievements: { 'first-completion': 100 }, stats: { wins: 4, wordsCompleted: 30, dailyDays: ['2026-10-01'] } };
+  P.saveCloud(JSON.stringify(other));
+  assert.equal(await P.flushSave(), true, 'other device saved first');
+  let mine = { ...base, settings: { theme: 'pine' }, journey: { unlocked: 3, stars: { 2: 1, 3: 2 } }, achievements: { 'first-completion': 50, 'streak-5': 70 }, stats: { wins: 2, wordsCompleted: 40, dailyDays: ['2026-10-02'] }, tutorialDone: true };
+  const merged = new Promise((resolve) => P.onConflict((remote) => {
+    mine = mergeStoreDoc(mine, remote);
+    P.saveCloud(JSON.stringify(mine));
+    P.flushSave().then(resolve);
+  }));
+  store.refuseNextPut = true;
+  P.saveCloud(JSON.stringify(mine));
+  assert.equal(await P.flushSave(), false, 'stale write refused');
+  assert.equal(await merged, true, 'merged doc saved');
+  assert.equal(window.StarHermit.saveConflicted(), false);
+  const cloud = JSON.parse(await P.loadCloud());
+  assert.deepEqual(cloud.journey, { unlocked: 5, stars: { 2: 3, 3: 2, 4: 1 } });
+  assert.deepEqual(cloud.achievements, { 'first-completion': 50, 'streak-5': 70 });
+  assert.deepEqual(cloud.stats, { wins: 4, wordsCompleted: 40, dailyDays: ['2026-10-01', '2026-10-02'] });
+  assert.equal(cloud.tutorialDone, true);
+  assert.equal(cloud.settings.theme, 'pine', 'settings stay local');
 });

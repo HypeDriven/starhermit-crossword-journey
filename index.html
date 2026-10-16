@@ -25,7 +25,7 @@
   <!-- Top bar -->
   <header class="topbar">
     <div class="brand"><span class="logo" aria-hidden="true">✦</span>
-      <h1>Crossword Journey</h1>
+      <h1 data-i18n-skip>Crossword Journey</h1>
     </div>
     <div class="topbar-status" id="topbar-status"></div>
     <nav class="topbar-nav" aria-label="App">
@@ -59,8 +59,8 @@
         </button>
       </div>
       <div class="menu-platform" id="menu-platform" hidden>
-        <button type="button" id="btn-signin" class="menu-card" hidden><span class="menu-card-title" id="btn-signin-label">Sign in with StarHermit</span></button>
-        <button type="button" id="btn-invite" class="menu-card" hidden><span class="menu-card-title" id="btn-invite-label">Invite a friend</span></button>
+        <button type="button" id="btn-signin" class="menu-card" hidden><span class="menu-card-title" id="btn-signin-label" data-i18n-skip>Sign in with StarHermit</span></button>
+        <button type="button" id="btn-invite" class="menu-card" hidden><span class="menu-card-title" id="btn-invite-label" data-i18n-skip>Invite a friend</span></button>
       </div>
     </section>
 
@@ -159,19 +159,19 @@
         <fieldset>
           <legend>Graphics</legend>
           <label>Theme <select id="set-theme"></select></label>
-          <label class="gfx-quality-row"><span id="gfx-quality-label">Quality</span>
+          <label class="gfx-quality-row"><span id="gfx-quality-label" data-i18n-skip>Quality</span>
             <select id="set-quality" data-gfx="preset"></select>
           </label>
-          <label class="gfx-scale-row"><span id="gfx-render-scale-label">Render scale</span>
+          <label class="gfx-scale-row"><span id="gfx-render-scale-label" data-i18n-skip>Render scale</span>
             <span class="gfx-scale-ctl">
               <input type="range" id="gfx-render-scale" data-gfx="render_scale" min="50" max="200" step="5" value="100" />
               <output id="gfx-render-scale-value" for="gfx-render-scale">100%</output>
             </span>
           </label>
-          <p class="gfx-subhead" id="gfx-effects-heading">Effects</p>
+          <p class="gfx-subhead" id="gfx-effects-heading" data-i18n-skip>Effects</p>
           <div id="gfx-categories" class="gfx-categories"></div>
-          <label><span id="gfx-adaptive-label">Adaptive resolution</span> <input type="checkbox" id="gfx-adaptive" data-gfx="adaptive" /></label>
-          <label><span id="gfx-show-fps-label">Show frame rate</span> <input type="checkbox" id="gfx-show-fps" data-gfx="show_fps" /></label>
+          <label><span id="gfx-adaptive-label" data-i18n-skip>Adaptive resolution</span> <input type="checkbox" id="gfx-adaptive" data-gfx="adaptive" /></label>
+          <label><span id="gfx-show-fps-label" data-i18n-skip>Show frame rate</span> <input type="checkbox" id="gfx-show-fps" data-gfx="show_fps" /></label>
           <p id="gfx-summary" class="gfx-summary" aria-live="polite"></p>
           <p id="gfx-note" class="gfx-note" hidden></p>
         </fieldset>
@@ -242,6 +242,9 @@
 
 <noscript><p class="noscript">Crossword Journey needs JavaScript to run. The board is fully usable without WebGL.</p></noscript>
 <script src="/starhermit-sdk.js"></script>
+<script src="/sh-language.js"></script>
+<script src="/js/strings.js"></script>
+<script src="/js/i18n.js"></script>
 <script type="module" src="/js/main.js"></script>
 </body>
 </html>

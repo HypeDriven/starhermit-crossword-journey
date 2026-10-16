@@ -12,11 +12,39 @@ import * as R from './rules.js';
 import * as C from './content.js';
 import { audio } from './audio.js';
 import { platform } from './platform.js';
+import { mergeStoreDoc } from './merge.js';
 import { CATEGORIES, DEFAULT_GFX, PRESETS, choosePreset, describe, presetTier, resolve } from './gfx.js';
 import { fmt, gfxStrings, pickLocale } from './gfx-strings.js';
 
 const $ = (id) => document.getElementById(id);
 const clamp = (v, lo, hi) => Math.max(lo, Math.min(hi, v));
+
+// Localization (js/i18n.js, window.CJI18N): English source strings are the
+// keys. T() translates now; N() only marks a string for display-time T().
+// The word bank and its clues are English by construction and stay English.
+const T = (key, vars) => (window.CJI18N ? window.CJI18N.T(key, vars)
+  : String(key).replace(/\{(\w+)\}/g, (m, k) => (vars && k in vars ? String(vars[k]) : m)));
+const N = (key) => key;
+const curLangs = () => (window.CJI18N?.lang ? [window.CJI18N.lang] : (navigator.languages?.length ? navigator.languages : [navigator.language]));
+const dirName = (dir) => (dir === 'across' ? T('Across') : T('Down'));
+// Lesson text: the clue-solving step names its entry, so build it from the entry.
+function stepText(step) {
+  if (step.require?.type === 'complete-entry') {
+    const e = session.def?.entries.find((x) => x.id === step.require.entry);
+    if (e) return T('Now solve this clue to finish the word: {number} {dir} — “{clue}”. Wrong letters can be retyped or cleared.', { number: e.number, dir: dirName(e.dir), clue: e.clue });
+  }
+  return T(step.text);
+}
+// Display name of a round definition (definitions keep English names).
+function defName(d) {
+  if (!d) return '';
+  if (d.mode === 'daily') return T('Daily — {date}', { date: d.id.replace('daily-', '') });
+  if (d.mode === 'practice') {
+    const m = /^practice-(easy|medium|hard)/.exec(d.id);
+    return T('Practice ({difficulty})', { difficulty: T(m ? m[1] : 'medium') });
+  }
+  return T(d.name);
+}
 
 // Platform UI strings (account status, sign-in, invite) in the nine locales.
 const PT = {
@@ -30,7 +58,7 @@ const PT = {
   'pt-BR': { offline: 'Offline — o progresso fica salvo neste dispositivo.', playing: 'Jogando como {name}', synced: 'progresso sincronizado', saving: 'salvando…', nosync: 'sincronização na nuvem indisponível', signIn: 'Entrar com StarHermit', invite: 'Convidar um amigo', copied: 'Link de convite copiado para a área de transferência.', copyFail: 'Não foi possível copiar — link de convite: {link}', lbPosting: 'Enviando a pontuação para o ranking…', lbRank: 'Posição no ranking: #{rank}', lbPosted: 'Pontuação enviada para o ranking.', lbNotPosted: 'A pontuação não foi enviada para o ranking.' },
   'it-IT': { offline: 'Offline: i progressi sono salvati su questo dispositivo.', playing: 'Giochi come {name}', synced: 'progressi sincronizzati', saving: 'salvataggio…', nosync: 'sincronizzazione cloud non disponibile', signIn: 'Accedi con StarHermit', invite: 'Invita un amico', copied: 'Link di invito copiato negli appunti.', copyFail: 'Impossibile copiare. Link di invito: {link}', lbPosting: 'Invio del punteggio alla classifica…', lbRank: 'Posizione in classifica: #{rank}', lbPosted: 'Punteggio inviato alla classifica.', lbNotPosted: 'Punteggio non inviato alla classifica.' }
 };
-const P_STR = PT[pickLocale(navigator.languages?.length ? navigator.languages : [navigator.language])] || PT['en-US'];
+let P_STR = PT[pickLocale(curLangs())] || PT['en-US']; // follows the game language
 
 // ---------------------------------------------------------------------------
 // Persistence — versioned localStorage document
@@ -160,10 +188,10 @@ function updateTopbarStatus() {
     const syncTxt = platform.sync === 'synced' ? P_STR.synced
       : platform.sync === 'saving' ? P_STR.saving
       : P_STR.nosync;
-    el.textContent = `${name} · ${syncTxt} · ${day} UTC`;
+    el.textContent = `${name} · ${syncTxt} · ${T('{date} UTC', { date: day })}`;
     return;
   }
-  el.textContent = `${day} UTC`;
+  el.textContent = T('{date} UTC', { date: day });
 }
 
 // ---------------------------------------------------------------------------
@@ -188,11 +216,11 @@ function announceObjective(msg) { $('objective').textContent = msg; }
 // ---------------------------------------------------------------------------
 
 const ACHIEVEMENTS = {
-  'first-completion': { name: 'First Completion', desc: 'Finish your first grid.' },
-  'mechanic-mastery': { name: 'Mechanic Mastery', desc: 'Win a mastery page.' },
-  'streak-5': { name: 'On a Roll', desc: 'Complete 5 words in a row.' },
-  'hard-milestone': { name: 'Hard Milestone', desc: 'Win a multiplied (hard) round.' },
-  'long-term-goal': { name: 'Seasoned Traveler', desc: 'Win 10 rounds in total.' },
+  'first-completion': { name: N('First Completion'), desc: N('Finish your first grid.') },
+  'mechanic-mastery': { name: N('Mechanic Mastery'), desc: N('Win a mastery page.') },
+  'streak-5': { name: N('On a Roll'), desc: N('Complete 5 words in a row.') },
+  'hard-milestone': { name: N('Hard Milestone'), desc: N('Win a multiplied (hard) round.') },
+  'long-term-goal': { name: N('Seasoned Traveler'), desc: N('Win 10 rounds in total.') },
 };
 
 // quiet: the results card already lists the unlock as a chip, so no toast over it.
@@ -201,7 +229,7 @@ function unlockAchievement(id, { quiet = false } = {}) {
   store.achievements[id] = Date.now();
   saveStore();
   audio.play('achievement');
-  if (!quiet) toast(`Achievement unlocked: ${ACHIEVEMENTS[id].name}`);
+  if (!quiet) toast(T('Achievement unlocked: {name}', { name: T(ACHIEVEMENTS[id].name) }));
   session.newAchievements.push(id);
 }
 
@@ -333,6 +361,8 @@ function transition(phase, reason) {
 function showScreen(id) {
   for (const s of SCREENS) $(s).hidden = s !== id;
   if (id !== 'screen-play') previousScreen = id;
+  // Settings/Help opened from a paused round: the letter tray would cover them.
+  if (id === 'screen-settings' || id === 'screen-help') $('tray').hidden = true;
 }
 
 // Focus restoration around modal overlays.
@@ -381,10 +411,10 @@ function firstPlayableCell(def) {
 function objectiveText() {
   const d = session.def;
   if (!d) return '';
-  const bits = [`Fill every square of “${d.name}”.`];
-  if (d.limits.timeMs) bits.push(`Time limit ${fmtTime(d.limits.timeMs)}.`);
-  if (d.limits.mistakes) bits.push(`At most ${d.limits.mistakes} flagged mistakes.`);
-  if (d.limits.checks) bits.push(`Only ${d.limits.checks} checks available.`);
+  const bits = [T('Fill every square of “{name}”.', { name: defName(d) })];
+  if (d.limits.timeMs) bits.push(T('Time limit {time}.', { time: fmtTime(d.limits.timeMs) }));
+  if (d.limits.mistakes) bits.push(T('At most {n} flagged mistakes.', { n: d.limits.mistakes }));
+  if (d.limits.checks) bits.push(T('Only {n} checks available.', { n: d.limits.checks }));
   return bits.join(' ');
 }
 
@@ -398,7 +428,7 @@ function endRound() {
   $('toasts').replaceChildren();
   if (!check.ok || check.finalHash !== R.hashState(st)) {
     console.error('replay verification failed', check);
-    toast('Local replay verification failed — score will not be submitted.');
+    toast(T('Local replay verification failed — score will not be submitted.'));
   }
   applyRoundOutcome(st);
   renderResults(check.ok ? envelope : null);
@@ -512,24 +542,24 @@ function dispatch(cmd) {
 }
 
 const ERROR_TEXT = {
-  'locked-cell': 'That letter is locked — it was confirmed or revealed.',
-  'bad-cell': 'That square is not part of the grid.',
-  'bad-letter': 'Only letters A–Z can be entered.',
-  'duplicate-id': 'Action already applied.',
-  'out-of-order': 'Action arrived out of order.',
-  'check-limit': 'No checks left for this round.',
-  'nothing-to-clear': 'That square is already empty.',
-  'already-correct': 'That letter is already correct.',
-  'unknown-command': 'Unknown action.',
-  'not-active': 'The round is over.',
-  'bad-scope': 'Unknown check scope.',
-  'bad-word': 'No such word.',
+  'locked-cell': N('That letter is locked — it was confirmed or revealed.'),
+  'bad-cell': N('That square is not part of the grid.'),
+  'bad-letter': N('Only letters A–Z can be entered.'),
+  'duplicate-id': N('Action already applied.'),
+  'out-of-order': N('Action arrived out of order.'),
+  'check-limit': N('No checks left for this round.'),
+  'nothing-to-clear': N('That square is already empty.'),
+  'already-correct': N('That letter is already correct.'),
+  'unknown-command': N('Unknown action.'),
+  'not-active': N('The round is over.'),
+  'bad-scope': N('Unknown check scope.'),
+  'bad-word': N('No such word.'),
 };
 
 function handleInvalid(reason) {
   audio.play('invalid');
   haptic(30);
-  announceError(ERROR_TEXT[reason] || `Invalid action: ${reason}`);
+  announceError(ERROR_TEXT[reason] ? T(ERROR_TEXT[reason]) : T('Invalid action: {reason}', { reason }));
 }
 
 function handleEvents(events) {
@@ -543,13 +573,13 @@ function handleEvents(events) {
         audio.play('word');
         haptic(20);
         const e = session.state.entries[ev.entry];
-        toast(`Word complete: ${e.number} ${e.dir} (streak ${ev.streak})`);
+        toast(T('Word complete: {number} {dir} (streak {streak})', { number: e.number, dir: dirName(e.dir), streak: ev.streak }));
         $('hud-score').textContent = String(session.state.score.total);
         break;
       }
       case 'check':
         audio.play('check');
-        if (ev.wrong.length) announceError(`${ev.wrong.length} wrong letter${ev.wrong.length > 1 ? 's' : ''} flagged.`);
+        if (ev.wrong.length) announceError(T(ev.wrong.length > 1 ? '{n} wrong letters flagged.' : '{n} wrong letter flagged.', { n: ev.wrong.length }));
         break;
       case 'reveal':
         audio.play('reveal');
@@ -604,8 +634,8 @@ setInterval(() => {
       session.timeWarned = true;
       audio.play('timeWarning');
       haptic(40);
-      toast('30 seconds left!');
-      announceError('30 seconds left.');
+      toast(T('30 seconds left!'));
+      announceError(T('30 seconds left.'));
     }
   }
 }, 250);
@@ -668,13 +698,13 @@ function cellAriaLabel(i) {
   const r = R.rowOf(st, i) + 1;
   const c = R.colOf(st, i) + 1;
   const cell = st.cells[i];
-  const parts = [`Row ${r} column ${c}`];
-  parts.push(cell.cur === '' ? 'empty' : `letter ${cell.cur}`);
-  if (cell.flag & R.FLAG.CONFIRMED) parts.push('confirmed');
-  if (cell.flag & R.FLAG.REVEALED) parts.push('revealed');
-  if (cell.flag & R.FLAG.WRONG) parts.push('wrong');
+  const parts = [T('Row {r} column {c}', { r, c })];
+  parts.push(cell.cur === '' ? T('empty') : T('letter {ch}', { ch: cell.cur }));
+  if (cell.flag & R.FLAG.CONFIRMED) parts.push(T('confirmed'));
+  if (cell.flag & R.FLAG.REVEALED) parts.push(T('revealed'));
+  if (cell.flag & R.FLAG.WRONG) parts.push(T('wrong'));
   const num = cellNumbers.get(i);
-  if (num !== undefined) parts.push(`starts clue ${num}`);
+  if (num !== undefined) parts.push(T('starts clue {n}', { n: num }));
   return parts.join(', ');
 }
 
@@ -706,9 +736,8 @@ function renderCells() {
 function announceBoardSummary() {
   const st = session.state;
   if (!st) return;
-  $('board-summary').textContent =
-    `Grid ${st.rows} by ${st.cols}. ${st.filledCorrect} of ${st.filledTotal} letters correct. ` +
-    `${st.wordsDone} of ${st.entries.length} words complete.`;
+  $('board-summary').textContent = T('Grid {rows} by {cols}. {correct} of {total} letters correct. {words} of {entries} words complete.',
+    { rows: st.rows, cols: st.cols, correct: st.filledCorrect, total: st.filledTotal, words: st.wordsDone, entries: st.entries.length });
 }
 
 // Entries containing a cell in a given direction.
@@ -743,12 +772,12 @@ function markSelectedCells() {
   const clueEl = $('current-clue');
   if (ei >= 0) {
     const e = session.def.entries[ei];
-    clueEl.textContent = `${e.number} ${e.dir === 'across' ? 'Across' : 'Down'} — ${e.clue}`;
+    clueEl.textContent = `${e.number} ${dirName(e.dir)} — ${e.clue}`;
     for (const li of document.querySelectorAll('.clue')) {
       li.setAttribute('aria-current', li.dataset.entry === String(ei) ? 'true' : 'false');
     }
   } else {
-    clueEl.textContent = 'Select a square to begin.';
+    clueEl.textContent = T('Select a square to begin.');
   }
   // Compact layouts keep the current clue beside the board (rails are drawers).
   const boardClue = $('board-clue');
@@ -764,7 +793,7 @@ function buildClueLists() {
   for (const dir of ['across', 'down']) {
     const h = document.createElement('p');
     h.className = 'clue-dir-heading';
-    h.textContent = dir === 'across' ? 'Across' : 'Down';
+    h.textContent = dirName(dir);
     box.appendChild(h);
     d.entries.forEach((e, idx) => {
       if (e.dir !== dir) return;
@@ -922,7 +951,7 @@ function checkGrid() {
 function revealHint() {
   if (!active()) return;
   const hint = R.getHint(session.state, currentEntryIdx() >= 0 ? currentEntryIdx() : null);
-  if (!hint) { announceError('Nothing to reveal — the grid is complete.'); return; }
+  if (!hint) { announceError(T('Nothing to reveal — the grid is complete.')); return; }
   session.roundMechanics.add('reveal');
   session.sel.cell = hint.cell;
   dispatch({ type: 'reveal', cell: hint.cell });
@@ -930,7 +959,7 @@ function revealHint() {
 
 function giveUp() {
   if (!active() && session.phase !== 'paused') return;
-  if (!window.confirm('Give up this round? It will count as a loss.')) return;
+  if (!window.confirm(T('Give up this round? It will count as a loss.'))) return;
   if (session.phase === 'paused') resumeRound();
   dispatch({ type: 'giveUp' });
 }
@@ -950,7 +979,14 @@ function setBindings(b) {
   for (const [a, codes] of Object.entries(b)) for (const c of codes || []) keyAction[c] = a;
 }
 setBindings(DEFAULT_KEYS);
-const keyLabel = (code) => String(code).replace(/^Key|^Digit/, '').replace(/^Arrow(.+)$/, '$1 arrow').replace(/^Escape$/, 'Esc');
+const KEY_WORDS = { Escape: N('Esc'), Space: N('Space'), Enter: N('Enter'), Tab: N('Tab'), Backspace: N('Backspace'), Delete: N('Delete') };
+const ARROWS = { Up: N('Up arrow'), Down: N('Down arrow'), Left: N('Left arrow'), Right: N('Right arrow') };
+const keyLabel = (code) => {
+  const arrow = /^Arrow(.+)$/.exec(code);
+  if (arrow) return ARROWS[arrow[1]] ? T(ARROWS[arrow[1]]) : `${arrow[1]} arrow`;
+  if (KEY_WORDS[code]) return T(KEY_WORDS[code]);
+  return String(code).replace(/^Key|^Digit/, '');
+};
 const kbd = (action) => (bindings[action] || []).map((c) => `<kbd>${keyLabel(c)}</kbd>`).join('/');
 
 document.addEventListener('keydown', (ev) => {
@@ -1045,7 +1081,7 @@ function showTutorialStep() {
     return;
   }
   const step = steps[session.tutorialStep];
-  banner.textContent = `Lesson ${session.tutorialStep + 1} of ${steps.length}: ${step.text}`;
+  banner.textContent = T('Lesson {n} of {total}: {text}', { n: session.tutorialStep + 1, total: steps.length, text: stepText(step) });
   banner.hidden = false;
   for (const btn of cellButtons) if (btn) btn.classList.remove('tutorial-focus');
   if (step.focus != null && cellButtons[step.focus]) {
@@ -1086,7 +1122,7 @@ function advanceTutorial(events) {
     session.tutorialStep++;
     if (session.tutorialStep < tut.steps.length) {
       showTutorialStep();
-      toast('Lesson complete!');
+      toast(T('Lesson complete!'));
       audio.play('lesson');
     } else {
       store.tutorialDone = true;
@@ -1102,33 +1138,37 @@ function advanceTutorial(events) {
 
 const MODE_INFO = {
   learn: {
-    name: 'Learn — First Page',
-    desc: 'Interactive lessons: one rule at a time. ~3 minutes.',
-    meta: 'Tutorial · unranked',
+    name: N('Learn — First Page'),
+    desc: N('Interactive lessons: one rule at a time. ~3 minutes.'),
+    meta: N('Tutorial · unranked'),
   },
   journey: {
-    name: 'Journey',
-    desc: '40 authored pages across five regions; mastery every eighth page.',
-    meta: 'Progress saved locally',
+    name: N('Journey'),
+    desc: N('40 authored pages across five regions; mastery every eighth page.'),
+    meta: N('Progress saved locally'),
   },
   daily: {
-    name: 'Daily Challenge',
-    desc: 'One shared grid per UTC day, synchronized to server time. ~5–15 minutes.',
-    meta: 'Ranked leaderboard',
+    name: N('Daily Challenge'),
+    desc: N('One shared grid per UTC day, synchronized to server time. ~5–15 minutes.'),
+    meta: N('Ranked leaderboard'),
   },
   practice: {
-    name: 'Practice',
-    desc: 'Fresh grid at your chosen difficulty. Restart freely.',
-    meta: 'Casual · unranked',
+    name: N('Practice'),
+    desc: N('Fresh grid at your chosen difficulty. Restart freely.'),
+    meta: N('Casual · unranked'),
   },
   challenge: {
-    name: 'Challenges',
-    desc: 'Constrained goals: time limits, few checks, big grids.',
-    meta: 'Ranked · bonus multiplier',
+    name: N('Challenges'),
+    desc: N('Constrained goals: time limits, few checks, big grids.'),
+    meta: N('Ranked · bonus multiplier'),
   },
 };
 
+// The mode list currently shown (re-rendered in place on a language change).
+let modeListView = null;
+
 function buildModeList() {
+  modeListView = buildModeList;
   const list = $('mode-list');
   list.innerHTML = '';
   const addItem = ({ label, desc, meta, disabled, stars, onPick }) => {
@@ -1145,7 +1185,7 @@ function buildModeList() {
       const s = document.createElement('span');
       s.className = 'mode-stars';
       s.textContent = '★'.repeat(stars) + '☆'.repeat(3 - stars);
-      s.setAttribute('aria-label', `${stars} of 3 stars`);
+      s.setAttribute('aria-label', T('{n} of 3 stars', { n: stars }));
       btn.appendChild(s);
     }
     const d = document.createElement('span');
@@ -1164,33 +1204,34 @@ function buildModeList() {
 
   for (const key of ['learn', 'daily', 'practice']) {
     addItem({
-      label: MODE_INFO[key].name,
-      desc: MODE_INFO[key].desc,
-      meta: MODE_INFO[key].meta,
+      label: T(MODE_INFO[key].name),
+      desc: T(MODE_INFO[key].desc),
+      meta: T(MODE_INFO[key].meta),
       onPick: () => startMode(key),
     });
   }
   addItem({
-    label: MODE_INFO.journey.name,
-    desc: MODE_INFO.journey.desc,
-    meta: `Unlocked through page ${store.journey.unlocked} of 40`,
+    label: T(MODE_INFO.journey.name),
+    desc: T(MODE_INFO.journey.desc),
+    meta: T('Unlocked through page {n} of 40', { n: store.journey.unlocked }),
     onPick: () => buildJourneyList(),
   });
   addItem({
-    label: MODE_INFO.challenge.name,
-    desc: MODE_INFO.challenge.desc,
-    meta: MODE_INFO.challenge.meta,
+    label: T(MODE_INFO.challenge.name),
+    desc: T(MODE_INFO.challenge.desc),
+    meta: T(MODE_INFO.challenge.meta),
     onPick: () => buildChallengeList(),
   });
 }
 
 function buildJourneyList() {
+  modeListView = buildJourneyList;
   const list = $('mode-list');
   list.innerHTML = '';
   const back = document.createElement('button');
   back.type = 'button';
   back.className = 'chip-btn';
-  back.textContent = '← All modes';
+  back.textContent = T('← All modes');
   back.addEventListener('click', buildModeList);
   list.appendChild(back);
   const stages = C.journeyStages();
@@ -1205,7 +1246,7 @@ function buildJourneyList() {
     btn.innerHTML = '';
     const name = document.createElement('span');
     name.className = 'mode-name';
-    name.textContent = `${n}. ${def.name}`;
+    name.textContent = `${n}. ${defName(def)}`;
     btn.appendChild(name);
     const s = document.createElement('span');
     s.className = 'mode-stars';
@@ -1213,7 +1254,7 @@ function buildJourneyList() {
     btn.appendChild(s);
     const d = document.createElement('span');
     d.className = 'mode-desc';
-    d.textContent = locked ? 'Finish the previous page to unlock.' : (def.blurb || `${def.pattern}, difficulty ${def.maxDifficulty}`);
+    d.textContent = locked ? T('Finish the previous page to unlock.') : (def.blurb ? T(def.blurb) : T('{pattern}, difficulty {n}', { pattern: def.pattern, n: def.maxDifficulty }));
     btn.appendChild(d);
     btn.addEventListener('click', () => { if (!locked) startRound(def); });
     list.appendChild(btn);
@@ -1221,12 +1262,13 @@ function buildJourneyList() {
 }
 
 function buildChallengeList() {
+  modeListView = buildChallengeList;
   const list = $('mode-list');
   list.innerHTML = '';
   const back = document.createElement('button');
   back.type = 'button';
   back.className = 'chip-btn';
-  back.textContent = '← All modes';
+  back.textContent = T('← All modes');
   back.addEventListener('click', buildModeList);
   list.appendChild(back);
   for (const def of C.challengeDefs()) {
@@ -1235,13 +1277,13 @@ function buildChallengeList() {
     btn.className = 'mode-item';
     const name = document.createElement('span');
     name.className = 'mode-name';
-    name.textContent = def.name;
+    name.textContent = defName(def);
     const d = document.createElement('span');
     d.className = 'mode-desc';
-    d.textContent = def.blurb;
+    d.textContent = T(def.blurb);
     const m = document.createElement('span');
     m.className = 'mode-meta';
-    m.textContent = `Ranked · ×${def.mult} points`;
+    m.textContent = T('Ranked · ×{n} points', { n: def.mult });
     btn.append(name, d, m);
     btn.addEventListener('click', () => startRound(def));
     list.appendChild(btn);
@@ -1249,12 +1291,13 @@ function buildChallengeList() {
 }
 
 function pickPractice() {
+  modeListView = pickPractice;
   const list = $('mode-list');
   list.innerHTML = '';
   const back = document.createElement('button');
   back.type = 'button';
   back.className = 'chip-btn';
-  back.textContent = '← All modes';
+  back.textContent = T('← All modes');
   back.addEventListener('click', buildModeList);
   list.appendChild(back);
   for (const diff of ['easy', 'medium', 'hard']) {
@@ -1263,13 +1306,13 @@ function pickPractice() {
     btn.className = 'mode-item';
     const name = document.createElement('span');
     name.className = 'mode-name';
-    name.textContent = `Practice — ${diff}`;
+    name.textContent = T('Practice — {difficulty}', { difficulty: T(diff) });
     const d = document.createElement('span');
     d.className = 'mode-desc';
-    d.textContent = { easy: 'Small 5×5 pages, common words.', medium: '6–7 wide pages, moderate words.', hard: 'Big 7–9 wide pages, tricky words.' }[diff];
+    d.textContent = T({ easy: N('Small 5×5 pages, common words.'), medium: N('6–7 wide pages, moderate words.'), hard: N('Big 7–9 wide pages, tricky words.') }[diff]);
     const m = document.createElement('span');
     m.className = 'mode-meta';
-    m.textContent = 'Casual · unranked · restart anytime';
+    m.textContent = T('Casual · unranked · restart anytime');
     btn.append(name, d, m);
     btn.addEventListener('click', () => startRound(C.practiceDef(diff)));
     list.appendChild(btn);
@@ -1288,46 +1331,58 @@ function startMode(key) {
 
 // Hosted only: post a ranked round's total to the `high-score` board and show
 // the player's rank on the results screen.
+let lbState = null; // null | 'posting' | { posted, rank }
 function postToLeaderboard(total) {
   const line = $('results-lb');
-  if (!platform.hosted) { line.hidden = true; return; }
+  if (!platform.hosted) { line.hidden = true; lbState = null; return; }
   line.hidden = false;
-  line.textContent = P_STR.lbPosting;
-  const round = session;
+  lbState = 'posting';
+  renderLbLine();
+  const round = session.def;
   platform.submitScore(total).then((r) => {
-    if (session !== round) return;
-    line.textContent = !r.posted ? P_STR.lbNotPosted
-      : r.rank ? fmt(P_STR.lbRank, { rank: r.rank }) : P_STR.lbPosted;
+    if (session.def !== round) return;
+    lbState = r;
+    renderLbLine();
   });
 }
+function renderLbLine() {
+  const line = $('results-lb'), r = lbState;
+  if (!line || !r) return;
+  line.textContent = r === 'posting' ? P_STR.lbPosting : !r.posted ? P_STR.lbNotPosted
+    : r.rank ? fmt(P_STR.lbRank, { rank: r.rank }) : P_STR.lbPosted;
+}
 
-function renderResults(validEnvelope) {
+// rerender: re-draw for a language change (no re-post, same next action).
+let lastResultsEnvelope = null;
+function renderResults(validEnvelope, rerender = false) {
+  lastResultsEnvelope = validEnvelope;
   const st = session.state;
   const d = session.def;
   const won = st.status === 'won';
   const reasons = {
-    'grid-complete': 'Page complete!',
-    'time-limit': 'Out of time.',
-    'mistake-limit': 'Too many mistakes.',
-    'gave-up': 'You gave up.',
+    'grid-complete': N('Page complete!'),
+    'time-limit': N('Out of time.'),
+    'mistake-limit': N('Too many mistakes.'),
+    'gave-up': N('You gave up.'),
   };
-  $('results-headline').textContent = won ? `✦ ${reasons[st.terminalReason]}` : reasons[st.terminalReason];
+  const reason = reasons[st.terminalReason] ? T(reasons[st.terminalReason]) : '';
+  $('results-headline').textContent = won ? `✦ ${reason}` : reason;
   const art = $('results-art');
-  if (art) {
+  if (art && !rerender) {
     art.hidden = false;
     art.src = won ? 'assets/results-win.webp' : 'assets/results-lose.webp';
   }
-  $('results-live').textContent =
-    `${won ? 'Won' : 'Lost'}: ${d.name}. Score ${st.score.total}. ` +
-    `${st.filledCorrect} of ${st.filledTotal} letters correct.`;
+  $('results-live').textContent = rerender ? $('results-live').textContent :
+    T(won ? 'Won: {name}. Score {score}. {correct} of {total} letters correct.' : 'Lost: {name}. Score {score}. {correct} of {total} letters correct.',
+      { name: defName(d), score: st.score.total, correct: st.filledCorrect, total: st.filledTotal });
 
   const rows = [
-    ['Letters', st.score.letters],
-    ['Words', st.score.words],
-    [`Streak bonus (best ×${st.bestStreak})`, st.score.streak],
-    ['Time bonus', st.score.time],
-    [`Assists (${st.checksUsed} checks, ${st.revealsUsed} reveals)`, st.score.assists],
-    ['Completion bonus', st.score.complete],
+    [T('Letters'), st.score.letters],
+    [T('Words'), st.score.words],
+    [T('Streak bonus (best ×{n})', { n: st.bestStreak }), st.score.streak],
+    [T('Time bonus'), st.score.time],
+    [T('Assists ({checks} checks, {reveals} reveals)', { checks: st.checksUsed, reveals: st.revealsUsed }), st.score.assists],
+    [T('Completion bonus'), st.score.complete],
   ];
   const dl = $('results-breakdown');
   dl.innerHTML = '';
@@ -1339,7 +1394,7 @@ function renderResults(validEnvelope) {
     dl.append(dt, dd);
   }
   const dt = document.createElement('dt');
-  dt.textContent = 'Total';
+  dt.textContent = T('Total');
   dt.className = 'total';
   const dd = document.createElement('dd');
   dd.textContent = String(st.score.total);
@@ -1350,30 +1405,30 @@ function renderResults(validEnvelope) {
   wrapT.append(dt, dd);
   dl.appendChild(wrapT);
 
-  $('results-meta').textContent =
-    `${d.name} · ${fmtTime(st.elapsedMs)} · ${st.wordsDone}/${st.entries.length} words · ` +
-    `${st.invalid} invalid actions · ${d.ranked ? 'ranked' : 'unranked'}`;
+  $('results-meta').textContent = `${defName(d)} · ${fmtTime(st.elapsedMs)} · ` +
+    T('{done}/{total} words · {invalid} invalid actions', { done: st.wordsDone, total: st.entries.length, invalid: st.invalid }) +
+    ` · ${d.ranked ? T('ranked') : T('unranked')}`;
 
   const ach = $('results-achievements');
   ach.innerHTML = '';
   for (const id of session.newAchievements) {
     const el = document.createElement('span');
     el.className = 'achievement';
-    el.textContent = `🏅 ${ACHIEVEMENTS[id].name}`;
+    el.textContent = `🏅 ${T(ACHIEVEMENTS[id].name)}`;
     ach.appendChild(el);
   }
 
   // Results stay on this device; when signed in, ranked rounds post to the board.
   $('results-rank').textContent = '';
-  $('results-lb').hidden = true;
+  if (!rerender) $('results-lb').hidden = true;
   if (validEnvelope && !session.def.ranked) {
     // Unranked rounds (lessons, casual) never go to a shared board.
-    $('results-rank').textContent = 'Unranked round — result saved on this device.';
+    $('results-rank').textContent = T('Unranked round — result saved on this device.');
   } else if (validEnvelope) {
-    $('results-rank').textContent = 'Result saved on this device.';
-    postToLeaderboard(Math.max(0, st.score.total));
+    $('results-rank').textContent = T('Result saved on this device.');
+    if (rerender) renderLbLine(); else postToLeaderboard(Math.max(0, st.score.total));
   } else {
-    $('results-rank').textContent = 'Score not submitted (verification failed).';
+    $('results-rank').textContent = T('Score not submitted (verification failed).');
   }
 
   // Next recommended action.
@@ -1382,20 +1437,20 @@ function renderResults(validEnvelope) {
   if (d.mode === 'journey' && won) {
     const n = Number(d.id.replace('journey-', ''));
     if (n < 40) {
-      label.textContent = `Next page: ${n + 1}`;
+      label.textContent = T('Next page: {n}', { n: n + 1 });
       next.onclick = () => startRound(C.journeyStage(n + 1));
     } else {
-      label.textContent = 'Journey complete — Daily';
+      label.textContent = T('Journey complete — Daily');
       next.onclick = () => startMode('daily');
     }
   } else if (d.mode === 'learn') {
-    label.textContent = 'Try the Daily Challenge';
+    label.textContent = T('Try the Daily Challenge');
     next.onclick = () => startMode('daily');
   } else if (d.mode === 'practice') {
-    label.textContent = 'New practice grid';
+    label.textContent = T('New practice grid');
     next.onclick = () => startRound(C.practiceDef(practiceDifficultyOf(d)));
   } else {
-    label.textContent = 'Back to modes';
+    label.textContent = T('Back to modes');
     next.onclick = () => { buildModeList(); transition('modes', 'next'); };
   }
   $('btn-retry').onclick = () => startRound(d, { tutorial: !!d.tutorial && !store.tutorialDone });
@@ -1423,7 +1478,7 @@ function openSettingsFromForm() {
   for (const t of C.THEMES) {
     const opt = document.createElement('option');
     opt.value = t.id;
-    opt.textContent = t.name;
+    opt.textContent = T(t.name);
     themeSel.appendChild(opt);
   }
   themeSel.value = s.theme;
@@ -1473,8 +1528,28 @@ function gfxOption(select, value, text) {
   return o;
 }
 
+// Graphics labels in the current game language (re-run on a language change).
+function labelGraphicsPanel() {
+  gfxLocale = pickLocale(curLangs());
+  const L = gfxL();
+  $('gfx-quality-label').textContent = L.quality;
+  const q = $('set-quality');
+  for (const o of q.options) if (o.value !== 'auto') o.textContent = L[o.value];
+  $('gfx-render-scale-label').textContent = L.renderScale;
+  $('gfx-effects-heading').textContent = L.effects;
+  for (const [cat, tiers] of Object.entries(CATEGORIES)) {
+    const sel = $(`gfx-${cat}`);
+    if (!sel) continue;
+    sel.previousElementSibling.textContent = L.cat[cat];
+    for (const o of sel.options) if (o.value !== 'preset' && tiers.includes(o.value)) o.textContent = L.tier[o.value] || o.value;
+  }
+  $('gfx-adaptive-label').textContent = L.adaptive;
+  $('gfx-show-fps-label').textContent = L.showFps;
+  syncGraphicsPanel();
+}
+
 function buildGraphicsPanel() {
-  gfxLocale = pickLocale(navigator.languages?.length ? navigator.languages : [navigator.language]);
+  gfxLocale = pickLocale(curLangs());
   const L = gfxL();
   $('gfx-quality-label').textContent = L.quality;
   const q = $('set-quality');
@@ -1564,7 +1639,7 @@ function refreshGraphicsInfo() {
 function wireSettings() {
   const s = store.settings;
   const bind = (id, fn) => $(id).addEventListener('change', fn);
-  bind('set-name', (e) => { store.profile.name = e.target.value.trim().slice(0, 24) || 'Guest'; saveStore(); refreshTitle(); });
+  bind('set-name', (e) => { store.profile.name = e.target.value.trim().slice(0, 24) || 'Guest'; saveStore(); refreshTitle(); }); // 'Guest' is the stored default name
   bind('set-vol-music', (e) => { s.volMusic = e.target.value / 100; applySettings(); });
   bind('set-vol-effects', (e) => { s.volEffects = e.target.value / 100; applySettings(); audio.play('correct'); });
   bind('set-vol-ambience', (e) => { s.volAmbience = e.target.value / 100; applySettings(); });
@@ -1584,15 +1659,19 @@ function wireSettings() {
 }
 
 function buildHelpCards() {
+  // Card bodies are translated text with <kbd> key chips filled in (keys are escaped markup from kbd()).
+  const esc = (s) => String(s).replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
+  const html = (key, keys) => esc(T(key, Object.fromEntries(Object.keys(keys || {}).map((k) => [k, '\u0001' + k + '\u0002']))))
+    .replace(/\u0001(\w+)\u0002/g, (m, k) => keys[k]);
   const cards = [
-    ['Enter letters', 'Type <kbd>A</kbd>–<kbd>Z</kbd> with the keyboard, or tap a square and type. Letters shared between crossing words fill both.'],
-    ['Move around', `${kbd('up')} ${kbd('down')} ${kbd('left')} ${kbd('right')} move the selection. ${kbd('nextClue')} jumps to the next clue. Tap a clue in the list to select its word.`],
-    ['Direction', `Tap the selected square again (or press ${kbd('toggleDir')}) to switch between Across and Down.`],
-    ['Fix mistakes', `${kbd('clear')} clears a square. Locked letters (confirmed ✓ or revealed ◆) cannot be changed.`],
-    ['Check', `${kbd('checkWord')} checks the current word, ${kbd('checkGrid')} checks the grid (from the clue list, or via the action buttons). Correct letters lock with ✓; wrong ones are flagged ✗. Each check costs a few points.`],
-    ['Reveal', `${kbd('reveal')} reveals one letter (◆) at a small score cost. Checks and reveals never lock you out of finishing.`],
-    ['Pause', `${kbd('pause')} pauses. The clock stops while paused or while the tab is hidden.`],
-    ['Winning', 'Fill every square correctly to complete the page. Score = letters + words + streaks + time bonus − assists.'],
+    [T('Enter letters'), html('Type {a}–{z} with the keyboard, or tap a square and type. Letters shared between crossing words fill both.', { a: '<kbd>A</kbd>', z: '<kbd>Z</kbd>' })],
+    [T('Move around'), html('{keys} move the selection. {next} jumps to the next clue. Tap a clue in the list to select its word.', { keys: `${kbd('up')} ${kbd('down')} ${kbd('left')} ${kbd('right')}`, next: kbd('nextClue') })],
+    [T('Direction'), html('Tap the selected square again (or press {key}) to switch between Across and Down.', { key: kbd('toggleDir') })],
+    [T('Fix mistakes'), html('{key} clears a square. Locked letters (confirmed ✓ or revealed ◆) cannot be changed.', { key: kbd('clear') })],
+    [T('Check'), html('{word} checks the current word, {grid} checks the grid (from the clue list, or via the action buttons). Correct letters lock with ✓; wrong ones are flagged ✗. Each check costs a few points.', { word: kbd('checkWord'), grid: kbd('checkGrid') })],
+    [T('Reveal'), html('{key} reveals one letter (◆) at a small score cost. Checks and reveals never lock you out of finishing.', { key: kbd('reveal') })],
+    [T('Pause'), html('{key} pauses. The clock stops while paused or while the tab is hidden.', { key: kbd('pause') })],
+    [T('Winning'), html('Fill every square correctly to complete the page. Score = letters + words + streaks + time bonus − assists.')],
   ];
   const box = $('help-cards');
   box.innerHTML = '';
@@ -1606,7 +1685,7 @@ function buildHelpCards() {
     card.append(h, p);
     box.appendChild(card);
   }
-  $('btn-help-back').addEventListener('click', goBackFromSub);
+  $('btn-help-back').onclick = goBackFromSub; // rebuilt on language/binding changes: no duplicate listeners
 }
 
 let subReturnPhase = 'title';
@@ -1622,7 +1701,7 @@ function wirePause() {
   $('pause-mute').addEventListener('click', () => {
     allMuted = !allMuted;
     audio.setMuted(allMuted);
-    $('pause-mute').textContent = allMuted ? 'Unmute all' : 'Mute all';
+    $('pause-mute').textContent = allMuted ? T('Unmute all') : T('Mute all');
   });
   $('pause-quality').addEventListener('click', () => {
     const order = ['auto', ...PRESETS];
@@ -1661,7 +1740,7 @@ function wireOsk() {
       b.type = 'button';
       b.className = 'osk-key' + (ch === '⌫' ? ' osk-wide' : '');
       b.textContent = ch;
-      b.setAttribute('aria-label', ch === '⌫' ? 'Backspace' : ch);
+      b.setAttribute('aria-label', ch === '⌫' ? T('Backspace') : ch);
       b.addEventListener('click', () => {
         if (!active()) return;
         audio.unlock();
@@ -1692,7 +1771,8 @@ function wireDrawers() {
     const toggle = document.createElement('button');
     toggle.type = 'button';
     toggle.className = 'rail-toggle';
-    toggle.textContent = rail.classList.contains('rail-left') ? 'Objective & clues ▾' : 'Clue & actions ▾';
+    toggle.className += rail.classList.contains('rail-left') ? ' rail-toggle-left' : ' rail-toggle-right';
+    toggle.textContent = rail.classList.contains('rail-left') ? T('Objective & clues ▾') : T('Clue & actions ▾');
     const body = document.createElement('div');
     body.className = 'rail-body';
     while (rail.firstChild) body.appendChild(rail.firstChild);
@@ -1714,8 +1794,8 @@ function wireDrawers() {
 function refreshTitle() {
   $('profile-sub').textContent = platform.hosted && platform.profile ? platform.profile.name : store.profile.name;
   const stars = Object.values(store.journey.stars).reduce((a, b) => a + b, 0);
-  $('journey-sub').textContent = `Page ${Math.min(store.journey.unlocked, 40)} of 40 · ${stars}★`;
-  $('daily-sub').textContent = `${new Date(serverNow()).toISOString().slice(0, 10)} · ranked`;
+  $('journey-sub').textContent = T('Page {n} of 40 · {stars}★', { n: Math.min(store.journey.unlocked, 40), stars });
+  $('daily-sub').textContent = T('{date} · ranked', { date: new Date(serverNow()).toISOString().slice(0, 10) });
 }
 
 // ---------------------------------------------------------------------------
@@ -1812,6 +1892,12 @@ function init() {
   try { platform.init(); } catch { /* offline */ }
   platform.onSync(updateTopbarStatus);
   platform.onAuth(() => { syncTime(); refreshPlatformButtons(); refreshTitle(); syncFromPlatform(); });
+  platform.onConflict((remote) => {
+    store = mergeStoreDoc(store, remote);
+    saveStore();
+    platform.flushSave(false);
+    refreshTitle();
+  });
   syncFromPlatform();
   wirePlatformButtons();
   applySettings();
@@ -1828,5 +1914,38 @@ function init() {
   refreshTitle();
   transition('title', 'boot-done');
 }
+
+// Game language changed (Settings → Language, or the account preference
+// arrived): js/i18n.js re-applied the static markup; re-render every string
+// built in code in place. The round, its clock and the board stay put.
+function onLanguage() {
+  P_STR = PT[pickLocale(curLangs())] || PT['en-US'];
+  $('btn-signin-label').textContent = P_STR.signIn;
+  $('btn-invite-label').textContent = P_STR.invite;
+  labelGraphicsPanel();
+  for (const o of $('set-theme').options) o.textContent = T(C.getTheme(o.value).name);
+  refreshTitle();
+  updateTopbarStatus();
+  buildHelpCards();
+  for (const t of document.querySelectorAll('.rail-toggle')) {
+    t.textContent = t.classList.contains('rail-toggle-left') ? T('Objective & clues ▾') : T('Clue & actions ▾');
+  }
+  $('pause-mute').textContent = allMuted ? T('Unmute all') : T('Mute all');
+  for (const b of document.querySelectorAll('.osk-key.osk-wide')) b.setAttribute('aria-label', T('Backspace'));
+  if (!$('screen-modes').hidden && modeListView) modeListView();
+  if (session.def && session.state && (session.phase === 'active' || session.phase === 'paused' || session.phase === 'resolving')) {
+    announceObjective(objectiveText());
+    buildClueLists();
+    renderCells();
+    updateHud();
+    if (session.def.tutorial && session.tutorialStep < session.def.tutorial.steps.length && !$('tutorial-banner').hidden) {
+      const banner = $('tutorial-banner');
+      const steps = session.def.tutorial.steps;
+      banner.textContent = T('Lesson {n} of {total}: {text}', { n: session.tutorialStep + 1, total: steps.length, text: stepText(steps[session.tutorialStep]) });
+    }
+  }
+  if (session.phase === 'results' && session.state) renderResults(lastResultsEnvelope, true);
+}
+document.addEventListener('cj-language', onLanguage);
 
 init();

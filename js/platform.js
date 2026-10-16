@@ -12,6 +12,8 @@
 const SAVE_DEBOUNCE_MS = 2000;
 const PATCH_DEBOUNCE_MS = 400;
 const sdk = () => (typeof window !== 'undefined' && window.StarHermit) || null;
+const tr = (k, v) => (typeof window !== 'undefined' && window.CJI18N ? window.CJI18N.T(k, v)
+  : String(k).replace(/\{(\w+)\}/g, (m, n) => (v && n in v ? String(v[n]) : m)));
 
 export const platform = {
   hosted: false,
@@ -19,6 +21,7 @@ export const platform = {
   sync: 'offline',       // offline | saving | synced (cloud mirror)
   _syncListeners: [],
   _authListeners: [],
+  _conflictListeners: [],
   _started: false,
   _patch: null,
   _patchTimer: null,
@@ -40,6 +43,14 @@ export const platform = {
       this._started = true;
       s.init();
       s.on('saved', (ok) => { if (this.hosted) this._setSync(ok ? 'synced' : 'offline'); });
+      // Another device saved first: hand the fresh remote document to the
+      // game, which merges and saves again (the SDK holds saves until then).
+      s.on('saveconflict', () => {
+        s.loadJSON().then((remote) => {
+          if (s.saveConflicted && s.saveConflicted()) return; // reload failed: stay held
+          for (const fn of this._conflictListeners) { try { fn(remote); } catch { /* ignore */ } }
+        }, () => {});
+      });
       s.on('auth', (a) => {
         const was = this.hosted;
         this.hosted = !!(a && a.signedIn && s.slug);
@@ -62,7 +73,7 @@ export const platform = {
   profileFor(userId) {
     const s = sdk();
     if (!s || !this.hosted || !userId) return Promise.resolve('player');
-    return s.profile(String(userId)).then((p) => (p ? p.displayName : `Player ${String(userId).slice(0, 6)}`));
+    return s.profile(String(userId)).then((p) => (p ? p.displayName : tr('Player {id}', { id: String(userId).slice(0, 6) })));
   },
   async fetchProfile() {
     if (!this.hosted) return null;
@@ -130,6 +141,7 @@ export const platform = {
 
   onSync(fn) { if (typeof fn === 'function') this._syncListeners.push(fn); },
   onAuth(fn) { if (typeof fn === 'function') this._authListeners.push(fn); },
+  onConflict(fn) { if (typeof fn === 'function') this._conflictListeners.push(fn); },
   _setSync(state) {
     if (this.sync === state) return;
     this.sync = state;
@@ -161,7 +173,7 @@ export const platform = {
       return Promise.all((r.items || []).slice(0, 20).map((e) => {
         const uid = String(e.userId != null ? e.userId : e.playerId || '');
         return this.profileFor(uid).then((name) => ({
-          name: uid === this.userId ? `You (${name})` : name,
+          name: uid === this.userId ? tr('You ({name})', { name }) : name,
           score: e.score != null ? e.score : e.value,
         }));
       }));
