@@ -315,6 +315,7 @@ async function runPass(vpName, viewport, hasTouch) {
       await page.waitForSelector('body[data-gfx-bloom="off"]');
       const summary = await page.textContent('#gfx-summary');
       if (!/px/.test(summary)) throw new Error(`summary missing: ${summary}`);
+      if (!/ · Level 0 · /.test(summary)) throw new Error(`summary lacks the hardware level: ${summary}`);
       await page.screenshot({ path: SHOT('graphics', vpName) });
       await page.reload({ waitUntil: 'load' });
       await page.waitForSelector('body[data-gfx-ready="true"]', { timeout: 15000 });

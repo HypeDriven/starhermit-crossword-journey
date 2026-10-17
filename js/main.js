@@ -1624,7 +1624,7 @@ function refreshGraphicsInfo() {
     return;
   }
   const info = dio.info();
-  summary.textContent = `${info.gpu || L.unknownGpu} · ${describe(info.resolved, info.pixels, L.sum)}`;
+  summary.textContent = `${info.gpu || L.unknownGpu} · ${fmt(L.level, { n: info.level })} · ${describe(info.resolved, info.pixels, L.sum)}`;
   note.textContent = L.postUnavailable;
   note.hidden = !info.postFailed;
   document.body.dataset.gfxPost = info.postFailed ? 'failed' : info.resolved.post ? 'on' : 'off';
@@ -1632,7 +1632,7 @@ function refreshGraphicsInfo() {
   clearTimeout(gfxInfoTimer);
   gfxInfoTimer = setTimeout(() => {
     const i2 = dio.info();
-    summary.textContent = `${i2.gpu || L.unknownGpu} · ${describe(i2.resolved, i2.pixels, L.sum)}`;
+    summary.textContent = `${i2.gpu || L.unknownGpu} · ${fmt(L.level, { n: i2.level })} · ${describe(i2.resolved, i2.pixels, L.sum)}`;
   }, 200);
 }
 

@@ -17,7 +17,7 @@ import { UnrealBloomPass } from 'three/addons/postprocessing/UnrealBloomPass.js'
 import { SMAAPass } from 'three/addons/postprocessing/SMAAPass.js';
 import { FXAAShader } from 'three/addons/shaders/FXAAShader.js';
 import { RoomEnvironment } from 'three/addons/environments/RoomEnvironment.js';
-import { detectPreset, resolve, SHADOW_MAP, PARTICLE_COUNT } from './gfx.js';
+import { detectLevel, presetForLevel, resolve, SHADOW_MAP } from './gfx.js';
 import { createStream } from './rules.js';
 
 // Colour grade + vignette: gentle S-curve, a touch more saturation, warm
@@ -94,16 +94,30 @@ function preToneMap(target) {
 // Procedural textures (built once, shared across rebuilds)
 // ---------------------------------------------------------------------------
 
-function noiseCanvas(size, draw) {
+// Run a post pass at a fraction of the frame (per-preset budget). EffectComposer sizes every pass to the
+// full frame in addPass/setSize, so the pass's own setSize is wrapped to apply the scale.
+function atScale(pass, k) {
+  if (!(k > 0 && k < 1)) return pass;
+  const setSize = pass.setSize.bind(pass);
+  pass.setSize = (w, h) => setSize(Math.max(1, Math.round(w * k)), Math.max(1, Math.round(h * k)));
+  return pass;
+}
+
+// `px`: the output size (per-preset texture variant); drawing happens in the `size` design space and scales.
+function noiseCanvas(size, draw, px = size) {
   const c = document.createElement('canvas');
-  c.width = c.height = size;
-  draw(c.getContext('2d'), size);
+  c.width = c.height = px;
+  const g = c.getContext('2d');
+  g.scale(px / size, px / size);
+  draw(g, size);
   return c;
 }
 
-let TEX = null;
-function textures() {
-  if (TEX) return TEX;
+const TEX_CACHE = new Map();
+function textures(b = {}) {
+  const key = (b.paperTexture || 256) + '|' + (b.woodTexture || 512);
+  if (TEX_CACHE.has(key)) return TEX_CACHE.get(key);
+  let TEX;
   let seed = 7;
   const rnd = () => ((seed = (seed * 16807) % 2147483647) / 2147483647);
   // Paper: near-white with fibres and faint mottling (multiplies the tint).
@@ -120,7 +134,7 @@ function textures() {
       const x = rnd() * n, y = rnd() * n, a = rnd() * Math.PI;
       g.beginPath(); g.moveTo(x, y); g.lineTo(x + Math.cos(a) * 9, y + Math.sin(a) * 9); g.stroke();
     }
-  });
+  }, b.paperTexture || 256);
   // Wood: long grain streaks for the desk.
   const wood = noiseCanvas(512, (g, n) => {
     g.fillStyle = '#8a5a3a'; g.fillRect(0, 0, n, n);
@@ -133,7 +147,7 @@ function textures() {
       g.fillStyle = 'rgba(40,22,10,0.55)';
       g.fillRect(0, Math.floor(rnd() * n), n, 2);
     }
-  });
+  }, b.woodTexture || 512);
   // Ripples: tangent-space normal map from summed sines (tiles seamlessly).
   const ripple = noiseCanvas(128, (g, n) => {
     const img = g.createImageData(n, n);
@@ -167,6 +181,7 @@ function textures() {
   };
   TEX = { paper: mk(paper, true, 2), wood: mk(wood, true, 1), ripple: mk(ripple, false, 3), dot: mk(dot, true) };
   TEX.wood.repeat.set(2, 1);
+  TEX_CACHE.set(key, TEX);
   return TEX;
 }
 
@@ -204,7 +219,9 @@ export function createDiorama(canvas, { isReducedMotion, mobile = false }) {
     const ext = gl.getExtension('WEBGL_debug_renderer_info');
     d.gpu = String(ext ? gl.getParameter(ext.UNMASKED_RENDERER_WEBGL) : gl.getParameter(gl.RENDERER) || '');
   } catch { d.gpu = ''; }
-  d.detected = detectPreset(d.gpu, { mobile });
+  // StarHermit hardware level → Auto preset (SwiftShader = level 0 → Low; phones cap at Balanced).
+  d.level = detectLevel(d.gpu, globalThis.StarHermitGpu ? globalThis.StarHermitGpu.detectSystem() : { mobile });
+  d.detected = presetForLevel(d.level);
 
   // Swap the canvas when the canvas's own MSAA must change (it is fixed at context creation).
   function ensureCanvasAA() {
@@ -243,7 +260,10 @@ export function createDiorama(canvas, { isReducedMotion, mobile = false }) {
     const t = d.theme;
     const g = d.q;
     const detailed = g.detail === 'detailed';
-    const tex = textures();
+    const tex = textures(g.budget);
+    const b = g.budget;
+    // Round-geometry LOD from the preset budget.
+    const seg = (n, min = 3) => Math.max(min, Math.round(n * b.segments));
     disposeScene();
     const scene = new THREE.Scene();
     const skyTop = new THREE.Color(t.sky).lerp(new THREE.Color('#ffffff'), 0.25).offsetHSL(0, 0.05, 0.02);
@@ -257,7 +277,7 @@ export function createDiorama(canvas, { isReducedMotion, mobile = false }) {
 
     // Sky dome.
     const sky = new THREE.Mesh(
-      new THREE.SphereGeometry(80, 32, 16),
+      new THREE.SphereGeometry(80, seg(32, 16), seg(16, 8)),
       new THREE.ShaderMaterial({
         uniforms: {
           uTop: { value: preToneMap(skyTop) }, uHorizon: { value: preToneMap(horizon) }, uGlow: { value: new THREE.Color('#ffd9a0') },
@@ -286,7 +306,14 @@ export function createDiorama(canvas, { isReducedMotion, mobile = false }) {
     d.key = key;
 
     const deco = createStream(d.seed + '-deco');
-    const mat = (color, extra = {}) => new THREE.MeshStandardMaterial({ color: new THREE.Color(color), roughness: 0.92, envMapIntensity: 0.18, ...extra });
+    // Material class per preset budget: Lambert on Low (roughness/metalness/env dropped), Standard above.
+    const mat = (color, extra = {}) => {
+      if (b.material === 'lambert') {
+        const { roughness, metalness, envMapIntensity, clearcoat, clearcoatRoughness, normalMap, normalScale, ...lp } = extra;
+        return new THREE.MeshLambertMaterial({ color: new THREE.Color(color), ...lp });
+      }
+      return new THREE.MeshStandardMaterial({ color: new THREE.Color(color), roughness: 0.92, envMapIntensity: 0.18, ...extra });
+    };
     const paperMat = (color, extra = {}) => mat(color, detailed ? { map: tex.paper, ...extra } : extra);
     const casters = [];
     const receivers = [];
@@ -319,24 +346,27 @@ export function createDiorama(canvas, { isReducedMotion, mobile = false }) {
     }
 
     // Ground disc of the diorama.
-    const ground = new THREE.Mesh(new THREE.CylinderGeometry(9, 9.6, 0.5, detailed ? 48 : 40), paperMat(t.ground));
+    const ground = new THREE.Mesh(new THREE.CylinderGeometry(9, 9.6, 0.5, seg(detailed ? 48 : 40, 32)), paperMat(t.ground));
     ground.position.y = -1.3;
     receivers.push(ground); casters.push(ground);
     scene.add(ground);
 
     // Pond.
     const waterColor = new THREE.Color(t.water);
-    const waterMat = detailed
+    // Water: clear-coat Physical on High/Ultra detailed scenes, Standard with ripples otherwise, Lambert on Low.
+    const waterMat = b.material === 'lambert'
+      ? new THREE.MeshLambertMaterial({ color: waterColor.clone().multiplyScalar(0.8) })
+      : detailed && b.material === 'physical'
       ? new THREE.MeshPhysicalMaterial({ color: waterColor.clone().multiplyScalar(0.7), roughness: 0.22, metalness: 0, clearcoat: 0.6, clearcoatRoughness: 0.12, normalMap: tex.ripple, normalScale: new THREE.Vector2(0.35, 0.35), envMapIntensity: 0.45 })
       : new THREE.MeshStandardMaterial({ color: waterColor.clone().multiplyScalar(0.8), roughness: 0.3, metalness: 0.05, normalMap: tex.ripple, normalScale: new THREE.Vector2(0.25, 0.25), envMapIntensity: 0.45 });
-    const water = new THREE.Mesh(new THREE.CylinderGeometry(3.2, 3.4, 0.56, 36), waterMat);
+    const water = new THREE.Mesh(new THREE.CylinderGeometry(3.2, 3.4, 0.56, seg(36, 24)), waterMat);
     water.position.set(-4.4 + deco.next() * 1.5, -1.26, 2.6 + deco.next());
     receivers.push(water);
     scene.add(water);
 
     // Hills: faceted papercraft domes around the sides and back.
     const hillCount = detailed ? 6 : 3;
-    const hillGeo = (r) => new THREE.SphereGeometry(r, detailed ? 10 : 20, detailed ? 6 : 12, 0, Math.PI * 2, 0, Math.PI / 2);
+    const hillGeo = (r) => new THREE.SphereGeometry(r, seg(detailed ? 10 : 20, 6), seg(detailed ? 6 : 12, 4), 0, Math.PI * 2, 0, Math.PI / 2);
     for (let i = 0; i < hillCount; i++) {
       const r = 1.5 + deco.next() * 2;
       const ang = Math.PI * (0.95 + deco.next() * 1.1);
@@ -411,14 +441,14 @@ export function createDiorama(canvas, { isReducedMotion, mobile = false }) {
       const lh = new THREE.Group();
       const white = mat('#e6dfd2', { roughness: 0.7 });
       const band = mat(t.accent, { roughness: 0.55 });
-      const tower = new THREE.Mesh(new THREE.CylinderGeometry(0.26, 0.38, 1.9, 12), white);
+      const tower = new THREE.Mesh(new THREE.CylinderGeometry(0.26, 0.38, 1.9, seg(12, 6)), white);
       tower.position.y = 0.95;
-      const stripe = new THREE.Mesh(new THREE.CylinderGeometry(0.33, 0.35, 0.28, 12), band);
+      const stripe = new THREE.Mesh(new THREE.CylinderGeometry(0.33, 0.35, 0.28, seg(12, 6)), band);
       stripe.position.y = 0.7;
       const beaconMat = new THREE.MeshStandardMaterial({ color: 0xfff1c9, emissive: 0xffc46b, emissiveIntensity: 2.4 });
       const beacon = new THREE.Mesh(new THREE.CylinderGeometry(0.2, 0.2, 0.26, 10), beaconMat);
       beacon.position.y = 2.03;
-      const roof = new THREE.Mesh(new THREE.ConeGeometry(0.3, 0.36, 12), band);
+      const roof = new THREE.Mesh(new THREE.ConeGeometry(0.3, 0.36, seg(12, 6)), band);
       roof.position.y = 2.34;
       lh.add(tower, stripe, beacon, roof);
       lh.position.set(water.position.x - 1.6, -1.05, water.position.z - 3.3);
@@ -471,7 +501,7 @@ export function createDiorama(canvas, { isReducedMotion, mobile = false }) {
     const post = new THREE.Mesh(new THREE.CylinderGeometry(0.05, 0.07, 1.5, 8), detailed ? brass : mat(t.ink));
     post.position.set(3.6, -0.55, 1.8);
     const lampMat = new THREE.MeshStandardMaterial({ color: 0xffe2b0, emissive: 0xffb85c, emissiveIntensity: detailed ? 3 : 0.9 });
-    const lamp = new THREE.Mesh(new THREE.SphereGeometry(0.18, 16, 12), lampMat);
+    const lamp = new THREE.Mesh(new THREE.SphereGeometry(0.18, seg(16, 8), seg(12, 6)), lampMat);
     lamp.position.set(3.6, 0.28, 1.8);
     casters.push(post);
     scene.add(post, lamp);
@@ -491,7 +521,7 @@ export function createDiorama(canvas, { isReducedMotion, mobile = false }) {
     anim.lightBase = lanternLight.intensity;
 
     // Fireflies: soft additive sprites drifting around the lantern and meadow.
-    const count = PARTICLE_COUNT[g.particles] || 0;
+    const count = b.fireflies; // per-preset budget (Particles tier caps it)
     if (count) {
       const pos = new Float32Array(count * 3);
       const seeds = new Float32Array(count * 4);
@@ -550,7 +580,8 @@ export function createDiorama(canvas, { isReducedMotion, mobile = false }) {
   }
 
   function sceneKeyNow() {
-    return [d.theme?.id, d.seed, d.q.detail, d.q.particles, d.q.reflections].join('|');
+    const b = d.q.budget; // preset asset variants are built into the scene
+    return [d.theme?.id, d.seed, d.q.detail, d.q.particles, d.q.reflections, b.material, b.paperTexture, b.woodTexture, b.segments, b.fireflies].join('|');
   }
 
   function refresh() {
@@ -565,7 +596,7 @@ export function createDiorama(canvas, { isReducedMotion, mobile = false }) {
 
   d.setGraphics = (saved) => {
     d.saved = saved || {};
-    d.q = resolve(d.saved, d.detected);
+    d.q = resolve(d.saved, d.detected, d.level);
     d.adaptiveScale = 1;
     d.frames = [];
     d.postKey = null;
@@ -580,6 +611,7 @@ export function createDiorama(canvas, { isReducedMotion, mobile = false }) {
 
   d.info = () => ({
     gpu: d.gpu,
+    level: d.level,
     detected: d.detected,
     resolved: d.q,
     pixels: [Math.round(d.size[0] * d.pixelRatio), Math.round(d.size[1] * d.pixelRatio)],
@@ -619,7 +651,7 @@ export function createDiorama(canvas, { isReducedMotion, mobile = false }) {
       composer.setSize(w, h);
       composer.addPass(new RenderPass(d.scene, d.camera));
       if (g.ao !== 'off') {
-        const ao = new GTAOPass(d.scene, d.camera, pw, ph);
+        const ao = atScale(new GTAOPass(d.scene, d.camera, pw, ph), g.budget.aoRes);
         ao.output = GTAOPass.OUTPUT.Default;
         ao.blendIntensity = 0.7;
         ao.updateGtaoMaterial({ radius: 0.6, distanceExponent: 1.4, thickness: 1.2, scale: 1.0, samples: g.ao === 'high' ? 16 : 8 });
@@ -628,7 +660,7 @@ export function createDiorama(canvas, { isReducedMotion, mobile = false }) {
       }
       if (g.bloom === 'on') {
         // High threshold: only the lantern, beacon, windows and fireflies bloom.
-        composer.addPass(new UnrealBloomPass(new THREE.Vector2(w, h), 0.7, 0.5, 0.92));
+        composer.addPass(atScale(new UnrealBloomPass(new THREE.Vector2(w, h), 0.7, 0.5, 0.92), g.budget.bloomRes));
       }
       if (g.grade === 'on') composer.addPass(new ShaderPass(GradeShader));
       composer.addPass(new OutputPass());
