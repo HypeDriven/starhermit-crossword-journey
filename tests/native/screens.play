@@ -1,0 +1,99 @@
+# The title, Settings (the profile name typed into its text field, the
+# theme, the colour-vision markers, the runtime's Options), Help, and a
+# Practice round: pause, Help from the pause, Give up with its confirm, the
+# results' lost headline, New practice grid.
+until 300 =▶ Play
+frames 20
+expect Your travel journal awaits
+click =Settings
+until 60 Display name
+frames 10
+click =Display name
+frames 5
+click Guest
+frames 5
+type Ada
+frames 10
+expect Color-vision-safe markers
+click =Color-vision-safe markers
+frames 5
+key F1 2
+frames 30
+key F1 2
+frames 30
+click =← Back
+until 60 Ada
+frames 10
+click =Help
+until 60 How to play
+frames 10
+expect Enter letters
+expect Move around
+click =← Back
+until 60 =▶ Play
+frames 10
+click =▶ Play
+until 60 Practice
+frames 10
+click =Practice
+until 60 Practice — easy
+frames 10
+click Practice — easy
+until 60 1 Across —
+frames 20
+type Q
+frames 5
+click =Pause
+until 30 Paused
+frames 10
+click =Help #2
+until 60 How to play
+frames 10
+click =← Back
+until 60 Paused
+frames 10
+click =Resume
+frames 10
+hold ShiftLeft
+frames 2
+key Tab 1
+frames 2
+release ShiftLeft
+frames 5
+key Enter 1
+frames 10
+key Tab 1
+frames 4
+key Tab 1
+frames 4
+key Tab 1
+frames 4
+key Tab 1
+frames 4
+key Enter 1
+until 30 Give up this round?
+frames 10
+click =Cancel
+frames 10
+click =Pause
+until 30 Paused
+frames 10
+click =Resume
+frames 10
+hold ShiftLeft
+frames 2
+key Tab 1
+frames 4
+key Tab 1
+frames 2
+release ShiftLeft
+frames 5
+key Enter 1
+until 30 Give up this round?
+frames 10
+click =Give up #2
+until 60 You gave up.
+frames 10
+expect New practice grid
+click =New practice grid
+until 60 1 Across —
