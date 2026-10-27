@@ -45,7 +45,8 @@ function styles(): { [key: string]: ui.Style } {
     scrollArea: { parts: { bar: { background: "$muted", radius: 4 } } },
     textField: { background: "#ffffff", border: { width: 2, color: "$tile-edge" }, radius: 8, minHeight: 44, padding: { start: 10, end: 10, top: 6, bottom: 6 }, text: { color: "$ink", size: 16 } },
     select: { background: "#ffffff", border: { width: 2, color: "$tile-edge" }, radius: 8, minHeight: 44, text: { color: "$ink", size: 16 } },
-    checkbox: { minHeight: 44, text: { color: "$ink", size: 16 } },
+    progress: { height: 14, radius: 7, parts: { track: { background: "#26313d26", radius: 7 }, fill: { background: "$ok", radius: 7 } } },
+    checkbox: { minHeight: 44, text: { color: "$ink", size: 16 }, parts: { box: { background: "#ffffff", border: { width: 2, color: "$muted" }, radius: 4 }, mark: { background: "$accent", radius: 2 } } },
   };
 }
 

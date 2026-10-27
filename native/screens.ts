@@ -72,7 +72,8 @@ function button(b: Btn, width: number | null = null): boolean {
   if (b.content) opts.content = b.content;
   else if (width != null && textWidth(b.text, style, "button") + 2 > width) {
     const inner = Math.max(20, width - 30);
-    opts.content = () => { ui.style({ text: { align: "center" } }).paragraph(b.text, inner); };
+    const light = style.some((c) => c === "act" || c === "danger" || c === "big");
+    opts.content = () => { ui.style({ text: { align: "center", ...(light && !ui.preferences().highContrast ? { color: "#ffffff" } : {}) } }).paragraph(b.text, inner); };
   }
   const hit = ui.style(...style, width != null ? { width } : {}).id(b.id).button(b.text, opts);
   if (hit) b.act();
@@ -158,7 +159,11 @@ function topbar(L: Layout): void {
   const r = ui.style("topbar").row("topbar", () => {
     ui.row("brand", () => {
       star("brand-star", L.phone ? 18 : 21);
-      ui.style("brand", L.phone ? { text: { size: 16 } } : {}).label("Crossword Journey");
+      // On a narrow bar the name wraps onto two lines (as the browser build's did).
+      const room = L.lw - 28 - 26 - (L.phone ? 16 : 36) - textWidth(tr("Help"), ["chip"], "button") - textWidth(tr("Settings"), ["chip"], "button") - (L.phone ? 0 : textWidth(statusLine(), ["status"]) + 12);
+      const brandStyle = ["brand", L.phone ? { text: { size: 16 } } : {}] as (string | ui.Style)[];
+      if (textWidth("Crossword Journey", brandStyle) <= room) ui.style(...brandStyle).label("Crossword Journey");
+      else ui.style(...brandStyle).paragraph("Crossword Journey", Math.max(60, room));
     }, { spacing: 8, align: "center" });
     ui.spacer();
     if (!L.phone) ui.style("status").id("status").label(statusLine());
@@ -375,7 +380,7 @@ function lessonBanner(w: number): void {
   ui.style("banner", { width: w }).column("banner", () => { para(text, w - 37, ["banner", { padding: 0, background: "transparent", border: { width: 0 } }], "lesson"); });
 }
 function oskShown(): boolean { return doc().settings.osk ?? primaryPointer() === "coarse"; }
-function tray(L: Layout, w: number, side: boolean): ui.Rect {
+function tray(L: Layout, w: number, side: boolean, h = 0): ui.Rect {
   const show = oskShown();
   const left = doc().settings.leftHanded;
   return ui.style("tray").column("tray", () => {
@@ -408,7 +413,7 @@ function tray(L: Layout, w: number, side: boolean): ui.Rect {
     const perRow = side ? 3 : inner >= 560 ? 5 : 3;
     const bw = Math.floor((inner - (perRow - 1) * 8) / perRow);
     flow("tray-actions", items, inner, 8, Math.min(180, bw));
-  }, { width: w, spacing: 6, padding: { top: 8, bottom: 8, start: 10, end: 10 }, align: "center", ...(side ? { justify: "end" as const } : {}) });
+  }, { width: w, spacing: 6, padding: { top: 8, bottom: 8, start: 10, end: 10 }, align: "center", ...(side ? { justify: "end" as const, height: h } : {}) });
 }
 function backspaceGlyph(): void {
   ui.widget("", {
@@ -506,9 +511,9 @@ function playScreen(L: Layout, bodyH: number): void {
   };
   if (side) {
     ui.row("play", () => {
-      if (left) tray(L, trayW, true);
+      if (left) tray(L, trayW, true, bodyH);
       main();
-      if (!left) tray(L, trayW, true);
+      if (!left) tray(L, trayW, true, bodyH);
     }, { width: L.lw, height: bodyH, spacing: 0 });
   } else {
     ui.column("play", () => {
@@ -670,7 +675,16 @@ function helpScreen(L: Layout, bodyH: number): void {
           ui.style("help-card", { width: cw }).column(`help-${i}`, () => {
             ui.style("help-title").label(title);
             if (keys.length) {
-              ui.row(`help-keys-${i}`, () => { keys.slice(0, 6).forEach((key, j) => ui.style("kbd").id(`kbd-${i}-${j}`).label(key)); }, { spacing: 6 });
+              // key chips wrapped into rows the card's width
+              const rows: string[][] = [[]];
+              let used = 0;
+              for (const key of [...new Set(keys)]) {
+                const kw = textWidth(key, ["kbd"]) + 6;
+                if (used && used + kw > cw - 32) { rows.push([]); used = 0; }
+                rows[rows.length - 1]!.push(key);
+                used += kw;
+              }
+              rows.forEach((r, ri) => ui.row(`help-keys-${i}-${ri}`, () => { r.forEach((key, j) => ui.style("kbd").id(`kbd-${i}-${ri}-${j}`).label(key)); }, { spacing: 6 }));
             }
             para(text.replace(/[✓◆✗]/g, (m) => ({ "✓": "(✓)", "◆": "(◆)", "✗": "(✗)" }[m] ?? m)), cw - 32, ["help-text"], `help-t${i}`);
           }, { spacing: 6 });
