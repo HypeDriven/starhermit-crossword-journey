@@ -1,17 +1,55 @@
 name=Crossword Journey
 description=Solve clue-based crossword puzzles as you travel through a journal of scenic destinations.
-launch=index.html
 owner=2712e04e-461b-4d23-81ae-e40b429128a8
 server=score-script.js
 cover=cover.jpg
-control.pause=Escape | Pause / resume
+
+# StarHermit engine script game: one package, played natively by the
+# StarHermit client and in browsers by the engine's web runtime. Browsers open
+# launch=index.html, the loader `npm run package` writes (it pins the engine
+# on wiki.starhermit.com by hash; never edit it). Re-run `npm run package`
+# after every change and commit index.html + starhermit-files.json.
+launch=index.html
+engine.api=1
+engine.entry=native/main.ts
+engine.version=1.16.2
+engine.minor=18
+engine.capabilities=platform,storage,clipboard
+
+# Keyboard controls (players rebind keys and pads in the runtime's Options).
+# Letters A–Z always type into the selected square (typed text, after the
+# keyboard layout) and are not bindable; a Check or Reveal key on a letter
+# acts only while the focus is off the board. The board, the clues and every
+# button are also played with the pointer, touch, or Tab and Enter.
 control.up=ArrowUp | Move up
 control.down=ArrowDown | Move down
 control.left=ArrowLeft | Move left
 control.right=ArrowRight | Move right
-control.nextClue=Enter+Tab | Next clue (Shift: previous)
-control.toggleDir=Space | Switch Across / Down
+control.nextclue=Enter | Next clue (Shift: previous)
+control.toggledir=Space | Switch Across / Down
 control.clear=Backspace+Delete | Clear square
-control.checkWord=KeyC | Check word
-control.checkGrid=KeyG | Check grid
+control.checkword=KeyC | Check word
+control.checkgrid=KeyG | Check grid
 control.reveal=KeyH | Reveal letter
+control.pause=Escape | Pause / resume
+engine.group.up=Board
+engine.group.checkword=Assists
+engine.group.pause=Round
+
+# Gamepad defaults: the D-pad or left stick steers the selection on the
+# board (and the menus elsewhere), South on the board moves to the on-screen
+# letter keys (South types the focused key, East returns), the right
+# shoulder hops to the next clue, North switches Across / Down, West clears,
+# Select checks the word, the left shoulder checks the grid, the right
+# trigger reveals a letter, Start pauses.
+engine.gamepad.up=DpadUp+LeftStickUp
+engine.gamepad.down=DpadDown+LeftStickDown
+engine.gamepad.left=DpadLeft+LeftStickLeft
+engine.gamepad.right=DpadRight+LeftStickRight
+engine.gamepad.nextclue=RightShoulder
+engine.gamepad.toggledir=North
+engine.gamepad.clear=West
+engine.gamepad.checkword=Select
+engine.gamepad.checkgrid=LeftShoulder
+engine.gamepad.reveal=RightTrigger
+engine.gamepad.pause=Start
