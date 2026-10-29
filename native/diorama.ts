@@ -17,8 +17,9 @@
 // the lantern flickers, the beacon pulses, the water bobs, ripples scroll
 // and the boats rock, fireflies drift; all frozen with reduced motion.
 //
-// Port notes: three.js's physically based light intensities are divided by
-// π (the engine's units). The sky dome's GLSL shader became a background
+// Port notes: the page's three.js r160 light intensities and shadow box as
+// they were (engine minor 28); per-material envMaps stand for r160's
+// envMapIntensity on scene.environment. The sky dome's GLSL shader became a background
 // texture painted once per theme (sRGB, so the theme's sky shows at its true
 // hue); the fog colour is still pre-inverted through ACES as the browser
 // build's post path did. The post chain (GTAO, UnrealBloom, the grade pass,
@@ -28,7 +29,7 @@ import {
   CylinderGeometry, DirectionalLight, DoubleSide, ExtrudeGeometry, Fog, Group, HemisphereLight, Mesh, MeshLambertMaterial,
   MeshPhysicalMaterial, MeshStandardMaterial, PMREMGenerator, PerspectiveCamera, PlaneGeometry, PointLight, Points, PointsMaterial,
   RepeatWrapping, RoomEnvironment, SRGBColorSpace, Shape, ShapeGeometry, SphereGeometry, Vector2, Vector3, renderer, scene,
-  type Material, type Object3D, type Texture,
+  type Material, type Object3D, type OrthographicCamera, type Texture,
 } from "starhermit:scene";
 import { OffscreenCanvas, type OffscreenCanvasRenderingContext2D } from "starhermit:canvas";
 import { createStream } from "../js/rules.js";
@@ -42,7 +43,6 @@ export interface Theme {
 const PI = Math.PI;
 const EXPOSURE = 1.25;
 /** three.js's physically based light intensities in the engine's units. */
-const K = 1 / PI;
 renderer.toneMapping = ACESFilmicToneMapping;
 renderer.toneMappingExposure = EXPOSURE;
 const camera = new PerspectiveCamera(46, 16 / 9, 0.1, 200);
@@ -224,14 +224,16 @@ function build(): void {
 
   // Lights: hemisphere fill + warm key sun whose soft shadow covers the diorama.
   const reflections = L.reflections;
-  const hemi = new HemisphereLight(new Color(t.sky).lerp(new Color("#ffffff"), 0.4), new Color(t.ground).multiplyScalar(0.7), (reflections ? 0.34 : 0.48) * K);
-  const key = new DirectionalLight(0xfff0d8, 0.8 * K);
+  const hemi = new HemisphereLight(new Color(t.sky).lerp(new Color("#ffffff"), 0.4), new Color(t.ground).multiplyScalar(0.7), reflections ? 0.34 : 0.48);
+  const key = new DirectionalLight(0xfff0d8, 0.8);
   key.position.copy(sunDir).multiplyScalar(16);
   key.target.position.set(0, -1.2, -1);
+  const sc = key.shadow.camera as OrthographicCamera;
+  Object.assign(sc, { left: -10.5, right: 10.5, top: 9, bottom: -9, near: 4, far: 34 });
+  sc.updateProjectionMatrix();
   key.shadow.bias = -0.0006;
-  key.shadow.normalBias = 1.2;
+  key.shadow.normalBias = 0.025;
   key.shadow.radius = 3;
-  key.shadow.distance = 34;
   key.castShadow = L.shadows > 0;
   if (L.shadows > 0) key.shadow.mapSize = L.shadows;
   renderer.shadowMap.enabled = L.shadows > 0;
@@ -427,7 +429,7 @@ function build(): void {
     base.position.set(3.6, 0.07, 1.8);
     g.add(cap, base);
   }
-  const lanternLight = new PointLight(0xffc27a, (detailed ? 2.5 : 1.2) * K, 12, detailed ? 1.6 : 2);
+  const lanternLight = new PointLight(0xffc27a, detailed ? 2.5 : 1.2, 12, detailed ? 1.6 : 2);
   lanternLight.position.copy(lamp.position);
   g.add(lanternLight);
 
@@ -462,6 +464,12 @@ function build(): void {
   for (const m of casters) m.castShadow = true;
   for (const m of receivers) m.receiveShadow = true;
   scene.environment = reflections ? environment() : null;
+  // r160 scaled scene.environment by each material's envMapIntensity: give each lit material its own envMap.
+  const envMap = scene.environment;
+  g.traverse((o) => {
+    const m = (o as Mesh).material;
+    for (const x of Array.isArray(m) ? m : m ? [m] : []) if (x instanceof MeshStandardMaterial || x instanceof MeshPhysicalMaterial) x.envMap = envMap;
+  });
   scene.add(g);
   const waterTex = (waterMat as MeshStandardMaterial).normalMap ?? null;
   anim = { water, boats, lanternLight, lampMat, lampBase: lampMat.emissiveIntensity, lightBase: lanternLight.intensity, beacon, flies, ripple: waterTex };
