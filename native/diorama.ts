@@ -495,12 +495,15 @@ export function applyLook(next: Look): void {
     denoise: { lumaPhi: 10, depthPhi: 2, normalPhi: 3, radius: next.ao === "high" ? 6 : 4, rings: 2, samples: next.ao === "high" ? 16 : 8, radiusExponent: 2 },
   };
   // High threshold: only the lantern, beacon, windows and fireflies bloom.
-  renderer.bloom = next.bloom ? { strength: 0.7, radius: 0.5, threshold: 0.92, resolution: next.budget.bloomRes } : null;
-  // The browser build's grade pass: a gentle S-curve, a touch more saturation, warm highlights / cool shadows, the 0.24 vignette.
+  // minor 29 bloom follows r185's UnrealBloomPass; this page ran three r160, so the strength is squared (0.7² ≈ 0.49) to keep its look.
+  renderer.bloom = next.bloom ? { strength: 0.49, radius: 0.5, threshold: 0.92, resolution: next.budget.bloomRes } : null;
+  // The browser build's grade pass (before OutputPass, so on linear light): a gentle S-curve, a touch more saturation,
+  // warm highlights / cool shadows, the 0.24 vignette.
   renderer.grade = next.grade ? {
-    space: "display", contrast: 0.18, saturation: 1.1,
+    space: "linear", contrast: 0.18, saturation: 1.1,
     shadows: [0.95, 0.98, 1.05], highlights: [1.05, 1.01, 0.95], split: [0.15, 0.8],
-    vignette: { amount: 0.24, inner: 0.32, outer: 0.9 },
+    vignette: { amount: 0.24, inner: 0.32, outer: 0.9, scale: [1.15, 1] },
+    overRange: "keep", // minor 29: mix(c, s + max(c - 1, 0), amount) as the page's grade
   } : null;
   renderer.antialias = next.antialias;
   refresh();
