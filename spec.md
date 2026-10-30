@@ -3,13 +3,13 @@
 **Status:** shipped; this document describes the game as it runs today.
 **Pitch:** a travel journal whose pages are small crosswords — solve clue-driven words across five scenic regions, one shared page every UTC day.
 **Genre:** clue puzzle (mini crosswords, 5×5 to 9×9). **Players:** 1; ranked results stay on the device and post to the platform board when signed in. **Session:** 2–5 minutes for a 5×5 page, 10–25 minutes for a 9×9 mastery or challenge page.
-**Platforms:** a StarHermit engine script game (engine 1.28.0, host API 1.30, `engine.minor=30`): played natively by the StarHermit client and in desktop and mobile browsers by the engine's web runtime, portrait and landscape. **Rendering:** the board, clues and HUD are `starhermit:ui` widgets (the accessible truth) over a purely decorative `starhermit:scene` papercraft diorama.
+**Platforms:** a StarHermit engine script game (engine 1.29.0, host API 1.31, `engine.minor=31`): played natively by the StarHermit client and in desktop and mobile browsers by the engine's web runtime, portrait and landscape. **Rendering:** the board, clues and HUD are `starhermit:ui` widgets (the accessible truth) over a purely decorative `starhermit:scene` papercraft diorama.
 
 ## 1. File map
 
 | Path | Role |
 |---|---|
-| `starhermit.txt` | Manifest: `launch=index.html`, `engine.entry=native/main.ts`, `engine.version=1.28.0`, `engine.minor=30`, capabilities `platform,storage,clipboard`, `server=score-script.js`, controls and gamepad defaults (§6). |
+| `starhermit.txt` | Manifest: `launch=index.html`, `engine.entry=native/main.ts`, `engine.version=1.29.0`, `engine.minor=31`, capabilities `platform,storage,clipboard`, `server=score-script.js`, controls and gamepad defaults (§6). |
 | `native/main.ts` | Entry module: state machine, round lifecycle, command dispatch (pre-validated), time-limit watchdog and 30 s warning, selection, input (keys, letters field, actions), Learn lessons, achievements, Journey progress, results with the local replay check and the leaderboard post, lifecycle (fixed 60 Hz steps). |
 | `native/screens.ts` | Every screen as immediate-mode `starhermit:ui`: top bar, title, mode select, play (wide / compact / short-landscape layouts), results, Settings, Help, pause dialog, give-up confirm, toasts. |
 | `native/board.ts` | The board: one `region` widget drawn with `starhermit:draw` (tiles, grout, numbers, letters, state colours and ✓ ✗ ◆ marks drawn as shapes, selection, lesson pulse, CVD hatching, paper shading), a `ui.target` per square, tap hit-testing. |
