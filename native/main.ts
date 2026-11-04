@@ -737,6 +737,7 @@ let suspended = false;
 onStart(() => {
   setFixedRate(60);
   initStyles();
+  audio.loadSfx();
   platform.initPlatform();
   platform.onDocChange(() => { applyTheme(theme()); dio.setTheme(theme()); });
   applyTheme(theme());

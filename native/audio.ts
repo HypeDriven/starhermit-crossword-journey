@@ -13,8 +13,8 @@
 // browser build played with oscillators and a noise buffer, are rendered
 // once into clips (createClip); the synthesized stand-ins it played while a
 // sample loaded are not ported (the engine's web runtime drops clip loads
-// while a synthesis graph changes). Clips load once the mixer runs
-// (natively at once, in a browser after the first press), one at a time.
+// while a synthesis graph changes). The one-shot clips all load at once in
+// onStart (every loaded clip reaches the mixer, natively and on the web).
 import { context, createClip, loadClip, play as playClip, type AudioClip, type Bus } from "starhermit:audio";
 
 const LEVEL = { music: 0.5 * 0.5, effects: 0.8 * 0.5, ambience: 0.4 * 0.5 };
@@ -27,19 +27,12 @@ const SFX_EVENTS: Record<string, string> = {
 };
 const EVENT_SAMPLES: Record<string, string[]> = {};
 for (const [name, ev] of Object.entries(SFX_EVENTS)) (EVENT_SAMPLES[ev] ??= []).push(name);
-// The first sounds of a round load first.
-const FIRST = ["select-tick-a", "key-tap-a", "correct-letter", "word-complete", "page-turn", "invalid-buzz", "check-mark", "reveal-shimmer"];
-
 const clips = new Map<string, AudioClip>();
-const queue: string[] = [];
-let loading = false;
-let asked = false;
-function load(name: string): void { if (!queue.includes(name) && !clips.has(name)) queue.push(name); }
-function pump(): void {
-  if (loading || !queue.length) return;
-  const name = queue.shift()!;
-  loading = true;
-  loadClip(`sfx/${name}.opus`).then((c) => { clips.set(name, c); loading = false; }, (e: unknown) => { console.warn(`sfx ${name}: ${String(e)}`); loading = false; });
+/** Loads every clip at once (onStart); a cue whose clips are all still loading is skipped. */
+export function loadSfx(): void {
+  for (const name of Object.keys(SFX_EVENTS)) {
+    loadClip(`sfx/${name}.opus`).then((c) => { clips.set(name, c); }, (e: unknown) => console.warn(`sfx ${name}: ${String(e)}`));
+  }
 }
 
 let started = false;
@@ -60,7 +53,7 @@ export function play(event: string): void {
   if (!clip) return;
   const bus: Bus = event === "select" ? "interface" : "effects";
   try { playClip(clip, { bus, gain: LEVEL.effects }); }
-  catch { clips.delete(file); load(file); } // a clip the mixer lost: load it again
+  catch { /* the mixer is full this frame: skip it */ }
 }
 
 // -- the rendered ambience and arpeggio ------------------------------------------------------
@@ -104,17 +97,10 @@ let ambienceStarted = false;
 let nextStep = 0;
 let step = 0;
 
-/** Each frame: the samples once the mixer runs (one at a time), one rendered clip a frame,
- * then (once unlocked) the ambience loop and the arpeggio by mixer time. */
+/** Each frame once the mixer runs: one rendered clip a frame, then (once unlocked) the
+ * ambience loop and the arpeggio by mixer time. */
 export function update(): void {
-  if (context.state !== "running") return;
-  if (!asked) {
-    asked = true;
-    for (const name of FIRST) load(name);
-    for (const name of Object.keys(SFX_EVENTS)) load(name);
-  }
-  pump();
-  if (loading || queue.length) return;
+  if (context.state !== "running") return; // starting the ambience and music still waits for the mixer
   try {
     if (!ambience) { ambience = ambienceClip(); return; }
     if (notes.length < 2) { notes.push(SCALE.map((f) => blipClip(f, 0.5, "sine", notes.length ? 0.16 : 0.12))); return; }

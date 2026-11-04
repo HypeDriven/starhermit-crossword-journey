@@ -81,18 +81,9 @@ function button(b: Btn, width: number | null = null): boolean {
 }
 /** Buttons wrapped into rows `width` wide (CSS flex-wrap), each its own width or `each`. */
 function flow(id: string, items: Btn[], width: number, gap: number, each: number | null = null, justify: ui.Align = "center"): void {
-  const sized = items.map((b) => ({ b, w: each ?? Math.min(width, textWidth(b.text, b.style ?? ["chip"], "button") + 2) }));
-  const rows: (typeof sized)[] = [];
-  let cur: typeof sized = [], used = 0;
-  for (const s of sized) {
-    if (cur.length && used + gap + s.w > width) { rows.push(cur); cur = []; used = 0; }
-    used += (cur.length ? gap : 0) + s.w;
-    cur.push(s);
-  }
-  if (cur.length) rows.push(cur);
-  ui.column(id, () => {
-    rows.forEach((r, ri) => ui.row(`${id}-r${ri}`, () => { for (const s of r) button(s.b, s.w); }, { spacing: gap, justify }));
-  }, { spacing: gap, align: justify === "center" ? "center" : "start" });
+  ui.row(id, () => {
+    for (const b of items) button(b, each ?? (textWidth(b.text, b.style ?? ["chip"], "button") + 2 > width ? width : null));
+  }, { wrap: true, width, gap, justify });
 }
 
 // ------------------------------------------------------------------ art
