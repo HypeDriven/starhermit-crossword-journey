@@ -237,7 +237,7 @@ function build(): void {
   key.shadow.normalBias = 0.025;
   key.shadow.radius = 3;
   key.castShadow = L.shadows > 0;
-  if (L.shadows > 0) key.shadow.mapSize = L.shadows;
+  if (L.shadows > 0) key.shadow.mapSize = L.shadows; // the level's size: at minor 23+ the engine keeps the game's mapSize
   renderer.shadowMap.enabled = L.shadows > 0;
   g.add(hemi, key, key.target);
 
@@ -492,13 +492,14 @@ function refresh(): void {
 /** The graphics level's look (quality.ts): post effects at once, the scene rebuilt when its assets change. */
 export function applyLook(next: Look): void {
   look = next;
-  renderer.ao = next.ao === "off" ? null : {
-    blendIntensity: 0.7, radius: 0.6, distanceExponent: 1.4, thickness: 1.2, scale: 1.0, samples: next.ao === "high" ? 16 : 8, resolution: next.budget.aoRes,
-    denoise: { lumaPhi: 10, depthPhi: 2, normalPhi: 3, radius: next.ao === "high" ? 6 : 4, rings: 2, samples: next.ao === "high" ? 16 : 8, radiusExponent: 2 },
+  const ao = next.ao, fullAo = !!ao && ao.resolution >= 1; // the engine's "high" AO: full resolution
+  renderer.ao = ao && {
+    blendIntensity: 0.7, radius: 0.6, distanceExponent: 1.4, thickness: 1.2, scale: 1.0, samples: ao.samples, resolution: ao.resolution,
+    denoise: { lumaPhi: 10, depthPhi: 2, normalPhi: 3, radius: fullAo ? 6 : 4, rings: 2, samples: ao.denoiseSamples, radiusExponent: 2 },
   };
   // High threshold: only the lantern, beacon, windows and fireflies bloom.
   // r160 page: its UnrealBloomPass(0.7, 0.5, 0.92) exactly (model "r160", strength as written).
-  renderer.bloom = next.bloom ? { model: "r160", strength: 0.7, radius: 0.5, threshold: 0.92, resolution: next.budget.bloomRes } : null;
+  renderer.bloom = next.bloom === null ? null : { model: "r160", strength: 0.7, radius: 0.5, threshold: 0.92, resolution: next.bloom };
   // The browser build's grade pass (before OutputPass, so on linear light): a gentle S-curve, a touch more saturation,
   // warm highlights / cool shadows, the 0.24 vignette.
   renderer.grade = next.grade ? {

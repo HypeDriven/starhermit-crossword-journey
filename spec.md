@@ -14,7 +14,7 @@
 | `native/screens.ts` | Every screen as immediate-mode `starhermit:ui`: top bar, title, mode select, play (wide / compact / short-landscape layouts), results, Settings, Help, pause dialog, give-up confirm, toasts. |
 | `native/board.ts` | The board: one `region` widget drawn with `starhermit:draw` (tiles, grout, numbers, letters, state colours and ✓ ✗ ◆ marks drawn as shapes, selection, lesson pulse, CVD hatching, paper shading), a `ui.target` per square, tap hit-testing. |
 | `native/diorama.ts` | The decorative diorama on `starhermit:scene` (port of the browser build's three.js `diorama.js`), the renderer's post effects, ambient motion. |
-| `native/quality.ts` | The browser build's graphics presets and budgets keyed by the runtime's quality tier and level. |
+| `native/quality.ts` | The level's engine effects (`levelSettings()`) plus the browser build's art presets and budgets keyed by the level's quality tier. |
 | `native/style.ts` | Registers `assets/ui-style.json`; theme colours into the style tokens; detailed-scenery shadows. |
 | `native/audio.ts` | Authored clips (`sfx/*.opus`) plus the ambience loop and arpeggio rendered into clips. |
 | `native/i18n.ts` | Locale from the runtime's interface language; `tr()` over `js/strings.js`, `pt()` over `js/platform-strings.js`. |
@@ -163,19 +163,19 @@ Five themes (`THEMES`) recolour tiles, accent and the diorama: Harbor Dawn (`sky
 
 **Motion:** camera drifts ±0.9 units on a ~2-minute sine, lantern flickers on a 2.7 s cycle, water bobs 3 cm, ripples scroll across the pond and the paper boats rock, the lighthouse beacon pulses and fireflies drift; the lesson square pulses. With the runtime's reduced motion all diorama motion and the pulse freeze.
 
-**Graphics.** ACES filmic tone mapping (exposure 1.25); the sky is a background gradient painted once per theme (sRGB, so the theme's sky shows at its true hue) and the fog is pre-inverted through the ACES curve. Lighting: a hemisphere fill in the theme's sky/ground colours, a warm key sun with a soft shadow, the lantern's point light (three.js intensities ÷ π). The runtime's graphics level (Options › Graphics: Auto from the device, or a level; render scale, adaptive resolution, frame-rate limit and readout are the runtime's) picks the browser build's preset by tier (`native/quality.ts`):
+**Graphics.** ACES filmic tone mapping (exposure 1.25); the sky is a background gradient painted once per theme (sRGB, so the theme's sky shows at its true hue) and the fog is pre-inverted through the ACES curve. Lighting: a hemisphere fill in the theme's sky/ground colours, a warm key sun with a soft shadow, the lantern's point light (three.js intensities ÷ π). The runtime's graphics level (Options › Graphics: Auto from the device, or a level; render scale, adaptive resolution, frame-rate limit and readout are the runtime's) sets the engine-owned effects from the level itself (`levelSettings()`, the table every StarHermit game reads: shadows and their map size, AO resolution and samples, bloom resolution, the grade, anti-aliasing) and picks the browser build's art preset by the level's tier (`native/quality.ts`). The table shows each tier's anchor level (quantum, molecular, terrestrial, galactic); the levels between take their own effects (e.g. atomic adds the grade and FXAA, stellar full-resolution AO and bloom with 4096² shadows):
 
 | | Low | Balanced | High | Ultra |
 |---|---|---|---|---|
 | Shadows | off | 1024² | 2048² | 4096² |
-| Ambient occlusion | off | off | on | high |
-| Bloom (emissive lights only, threshold 0.92) / colour grade + vignette | off | on | on | on |
-| Anti-aliasing | MSAA | FXAA | SMAA | MSAA |
+| Ambient occlusion | off | off | ½ res, 8 samples | full res, 16 samples |
+| Bloom (emissive lights only, threshold 0.92) / colour grade + vignette | off | ½ res / on | ½ res / on | full res / on |
+| Anti-aliasing (Low keeps MSAA where the level has none; see `native/quality.ts`) | MSAA | FXAA | SMAA | MSAA |
 | Reflections (RoomEnvironment) | off | on | on | on |
 | Materials | Lambert | Standard | Physical water | Physical water |
-| Paper / wood textures | 128 / 256 | 256 / 512 | 256 / 512 | 512 / 1024 |
+| Paper / wood textures (within the level's largest) | 128 / 256 | 256 / 512 | 256 / 512 | 512 / 1024 |
 | Round-geometry segments | ×0.5 | ×0.75 | ×1 | ×1.5 |
-| Fireflies (scaled up with the level, capped) | 0 | 30 (≤ 40) | 110 (≤ 440) | 160 (≤ 440) |
+| Fireflies (scaled by the level's particle budget against the anchor's, ≤ 4×, capped) | 0 | 30 (≤ 40) | 110 (≤ 440) | 160 (≤ 440) |
 | Detailed scenery and paper-tile board shading | — | ✓ | ✓ | ✓ |
 
 The browser build's own Graphics section (per-effect overrides, GPU summary, Pause's Cycle quality) is replaced by the runtime's Options.
@@ -253,7 +253,7 @@ The game ships in **nine locales**: en-US, en-GB, es-419, es-ES, de-DE, fr-FR, f
 - **rules / content** (`tests/rules.test.mjs`, `tests/content.test.mjs`): as before — every command and rejection, scoring, limits, replay and tamper detection, fuzzing; bank, masks, generator determinism, every mode's defs winnable.
 - **save** (`tests/save.test.mjs`): browser documents read back with only the game-owned settings, junk refused, the old cloud save migrates, merges keep the better of both, legacy keys.
 - **i18n** (`tests/i18n.test.mjs`): every key `native/*.ts` and the content show is translated in every locale with placeholders intact and no unused rows; the account lines in every locale; locale switching.
-- **native** (`tests/native.mjs`): the web index is current, `tsc` (strict, no skipLibCheck), `starhermit check .` with zero warnings, and the play scripts in `tests/native/` as guest render checks: `journey.play` (Journey card → page 1 typed into the letters field with one Check and one Reveal → results total, First Completion, Next page → pause → Leave round, title shows 2★), `learn.play` (the six lessons through the real actions), `challenge.play` (Speed Ink solved, ranked, Hard Milestone), `screens.play` (Settings name typed, markers, Options, Help, Practice pause → Help → Resume, Give up with Cancel then confirm, New practice grid). `npm run plays` regenerates the first three from `tools/plan.mjs`.
+- **native** (`tests/native.mjs`): the web index is current, `tsc` (strict, no skipLibCheck), `starhermit check .` with zero warnings, and the play scripts in `tests/native/` as guest render checks: `journey.play` (Journey card → page 1 typed into the letters field with one Check and one Reveal → results total, First Completion, Next page → pause → Leave round, title shows 2★), `learn.play` (the six lessons through the real actions), `challenge.play` (Speed Ink solved, ranked, Hard Milestone), `screens.play` (Settings name typed, markers, Options, Help, Practice pause → Help → Resume, Give up with Cancel then confirm, New practice grid), `tier-bench.play` (journey page 1 typed over the diorama; `tools/engine-tier-bench.mjs` measures it per graphics level). `npm run plays` regenerates the first three from `tools/plan.mjs`.
 - **browser** (`npm run test:browser`, `tools/browser-play.mjs`): the packaged loader in Chrome on the GPU at 1366×768, 390×844 (with on-screen key taps; Settings and Help) and 844×390, Journey page 1 to its results by keyboard; fails on console errors or warnings.
 
 ## 15. Asset inventory

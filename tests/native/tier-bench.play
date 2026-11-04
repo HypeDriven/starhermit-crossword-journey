@@ -1,0 +1,26 @@
+# Tier bench (tools/engine-tier-bench.mjs): journey page 1 "First Mooring" (a
+# fixed grid), letters typed into the board as journey.play does, over the
+# animated diorama (water, fireflies, lamps).
+until 300 =▶ Play
+frames 20
+click =Journey
+until 60 1. First Mooring
+frames 10
+click 1. First Mooring
+until 60 1 Across —
+frames 20
+click Type letters
+frames 120
+measure start
+type CAT
+frames 60
+key Enter 1
+frames 3
+type PEN
+frames 60
+key Enter 1
+frames 3
+type LM
+frames 60
+frames 420
+measure stop

@@ -19,7 +19,7 @@
 // runtime's text field on the play screen (a tap on a phone brings up the
 // device keyboard; at engine.minor 17+ the field holds game actions back
 // while it has the keyboard), or the on-screen letter keys.
-import { clipboard, frame, onFixedUpdate, onQuit, onRender, onResume, onStart, onSuspend, onUpdate, onPreferencesChange, preferences, setFixedRate } from "starhermit:engine";
+import { clipboard, frame, levelSettings, onFixedUpdate, onQuit, onRender, onResume, onStart, onSuspend, onUpdate, onPreferencesChange, preferences, setFixedRate } from "starhermit:engine";
 import { bindings, isKeyDown, onAction, onKey, primaryPointer, vibrate } from "starhermit:input";
 import * as ui from "starhermit:ui";
 import { requestSignIn } from "starhermit:platform";
@@ -67,7 +67,7 @@ export const app = {
   /** Widget to focus once the screen is built. */
   focusNext: null as string | null,
   toasts: [] as { text: () => string; until: number }[],
-  look: lookFor("balanced", 2) as Look,
+  look: lookFor(levelSettings("molecular")) as Look,
   confirmGiveUp: false,
   /** Compact layouts: which drawers are open. */
   drawers: { left: false, right: false },
@@ -725,10 +725,10 @@ onAction((e) => {
 let lookKey = "";
 function applyLook(): void {
   const f = frame();
-  const key = `${f.quality}:${f.levelIndex}`;
+  const key = f.level;
   if (key === lookKey) return;
   lookKey = key;
-  app.look = lookFor(f.quality, f.levelIndex);
+  app.look = lookFor(levelSettings(f.level));
   styleLook(app.look);
   dio.applyLook(app.look);
 }
