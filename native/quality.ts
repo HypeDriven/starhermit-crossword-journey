@@ -74,10 +74,7 @@ export function lookFor(s: LevelSettings = levelSettings()): Look {
     ao: s.ao && { resolution: s.ao.resolution, samples: s.ao.samples, denoiseSamples: s.ao.denoiseSamples },
     bloom: s.bloom ? s.bloom.resolution : null,
     grade: s.grade,
-    // Engine issue (1.36.1, reported): with antialias "off" portrait windows draw parts of
-    // the scene in other colours (the hazy sky turns mint), so Low keeps the MSAA it always
-    // had; the other levels take the level's anti-aliasing.
-    antialias: s.antialias === "off" ? "msaa" : s.antialias,
+    antialias: s.antialias,
     budget: {
       ...b,
       paperTexture: Math.min(b.paperTexture, s.maxTextureSize), woodTexture: Math.min(b.woodTexture, s.maxTextureSize),
