@@ -4,7 +4,7 @@
 // Journey and Profile cards, Sign in and Invite), the mode select (modes,
 // the Journey's 40 pages, the challenges, the practice difficulties), the
 // play screen, the results, Settings, Help, the pause dialog, the give-up
-// confirm and the toasts. The CSS breakpoints are layouts picked by the
+// confirm. The CSS breakpoints are layouts picked by the
 // window's logical size:
 // - wide (≥ 1024 px): three rails — objective, HUD and the clue lists on the
 //   left, the board in the middle, the current clue, the actions and the
@@ -25,7 +25,7 @@ import { bindings, primaryPointer } from "starhermit:input";
 import * as ui from "starhermit:ui";
 import * as C from "../js/content.js";
 import { boardSize, buildBoard, fitCell } from "./board.ts";
-import { N, pt, tr } from "./i18n.ts";
+import { N, tr } from "./i18n.ts";
 import * as platform from "./platform.ts";
 import {
   ACHIEVEMENTS, app, askGiveUp, checkGrid, checkWord, clearCell, closeSub, copyInvite, currentEntryIdx, defName, dirName, doc,
@@ -40,10 +40,8 @@ export const BOARD_ID = "board";
 // ------------------------------------------------------------------ layout
 interface Layout { lw: number; lh: number; sc: number; wide: boolean; shortLand: boolean; phone: boolean; big: boolean }
 function layoutNow(): Layout {
-  const f = frame();
-  const sc = ui.preferences().scale;
-  const sa = f.safeArea;
-  const lw = Math.max(1, (f.width - sa.left - sa.right) / sc), lh = Math.max(1, (f.height - sa.top - sa.bottom) / sc);
+  const v = ui.viewport!();
+  const sc = v.scale, lw = Math.max(1, v.width), lh = Math.max(1, v.height);
   const shortLand = lw > lh && lh <= 500;
   return { lw, lh, sc, wide: lw >= 1024 && !shortLand, shortLand, phone: lw <= 700, big: lw > 1600 && lh > 1000 };
 }
@@ -118,7 +116,6 @@ export function drawScreens(): void {
   }, { width: L.lw, height: L.lh, spacing: 0 });
   pauseDialog(L);
   giveUpDialog(L);
-  toasts(L);
   if (app.focusNext) {
     const age = f.frame - app.openedFrame;
     if (age >= 1) ui.setFocus(app.focusNext === TYPING ? typingFocus() : app.focusNext);
@@ -142,7 +139,7 @@ function statusLine(): string {
   const day = tr("{date} UTC", { date: new Date(platform.serverNow()).toISOString().slice(0, 10) });
   if (!platform.signedIn()) return day;
   const s = platform.syncState();
-  const sync = s === "synced" ? pt("synced") : s === "saving" ? pt("saving") : pt("nosync");
+  const sync = s === "synced" ? tr("progress synced") : s === "saving" ? tr("saving…") : tr("cloud sync unavailable");
   return `${platform.displayName() || "…"} · ${sync} · ${day}`;
 }
 function topbar(L: Layout): void {
@@ -193,8 +190,8 @@ function titleScreenUi(L: Layout, bodyH: number): void {
           card("btn-profile", tr("Profile"), platform.signedIn() ? platform.displayName() : (d.profile.name === "Guest" ? tr("Guest") : d.profile.name), () => { openSub("settings"); app.focusNext = "set-name"; }),
         ], w, 12, cw);
         const plat: Btn[] = [];
-        if (!platform.signedIn()) plat.push({ id: "btn-signin", text: pt("signIn"), style: ["card"], act: signIn });
-        else if (platform.inviteLink()) plat.push({ id: "btn-invite", text: pt("invite"), style: ["card"], act: copyInvite });
+        if (!platform.signedIn()) plat.push({ id: "btn-signin", text: tr("starhermit.signIn"), style: ["card"], act: signIn });
+        else if (platform.inviteLink()) plat.push({ id: "btn-invite", text: tr("starhermit.invite"), style: ["card"], act: copyInvite });
         if (plat.length) flow("title-platform", plat, w, 12, cw);
       }, { spacing: 18, align: "center" });
       track("title-rest", rest);
@@ -687,7 +684,7 @@ function helpScreen(L: Layout, bodyH: number): void {
   if (ui.back() && frame().frame !== app.openedFrame) closeSub();
 }
 
-// ------------------------------------------------------------------ pause, give up, toasts
+// ------------------------------------------------------------------ pause, give up
 function pauseDialog(L: Layout): void {
   const open = app.phase === "paused" && !app.sub;
   const w = Math.min(420, L.lw - 32);
@@ -719,28 +716,6 @@ function giveUpDialog(L: Layout): void {
   });
   if (open && !still && frame().frame !== app.openedFrame) app.confirmGiveUp = false;
 }
-function toasts(L: Layout): void {
-  if (!app.toasts.length) return;
-  const w = Math.min(420, L.lw - 24);
-  // A 0 × 0 placed widget's draw paints over everything without taking the pointer.
-  const items = app.toasts.map((t) => t.text());
-  ui.place("toasts", { anchor: "top-end", x: 12, y: H("topbar", 56) + 8 }, () => {
-    ui.widget("", {
-      role: "none", size: { width: 0, height: 0 },
-      draw: (r, st) => {
-        const k = st.scale;
-        let y = r.y;
-        for (const text of items) {
-          const size = 16 * k * ui.preferences().textScale;
-          const m = draw.measureText(text, { size, weight: "600", maxWidth: (w - 32) * k });
-          const bw = m.width + 32 * k, bh = m.height + 20 * k;
-          const x = r.x - bw;
-          draw.box(x, y, bw, bh, { background: st.highContrast ? "#000000" : palette().ink, radius: 10, shadow: { y: 4, blur: 14, color: "#00000066" }, ...(st.highContrast ? { border: { width: 2, color: "#ffffff" } } : {}) });
-          draw.text(text, x + 16 * k, y + 10 * k, { size, weight: "600", color: st.highContrast ? "#ffffff" : palette().paper, maxWidth: (w - 32) * k });
-          y += bh + 8 * k;
-        }
-      },
-    });
-  });
-}
+/** A toast's distance from the top: 8 px under the bar, less the stack's 16 px margin. */
+export function toastOffset(): number { return H("topbar", 56) + 8 - 16; }
 export { show };

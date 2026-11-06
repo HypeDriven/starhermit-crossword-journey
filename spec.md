@@ -17,12 +17,12 @@
 | `native/quality.ts` | The level's engine effects (`levelSettings()`) plus the browser build's art presets and budgets keyed by the level's quality tier. |
 | `native/style.ts` | Registers `assets/ui-style.json`; theme colours into the style tokens; detailed-scenery shadows. |
 | `native/audio.ts` | Authored clips (`sfx/*.opus`) plus the ambience loop and arpeggio rendered into clips. |
-| `native/i18n.ts` | Locale from the runtime's interface language; `tr()` over `js/strings.js`, `pt()` over `js/platform-strings.js`. |
+| `native/i18n.ts` | Locale from the runtime's interface language; `tr()` over the engine's `strings` (`assets/strings.json`); account lines are its `starhermit.*` keys. |
 | `native/platform.ts` | Saves (`starhermit:storage` `saves`, foreign-save migration, conflict merge), legacy settings migration, server clock, player name, invite link, high-score post through `score-script.js`. |
 | `js/rules.js` | Pure deterministic rules engine: `createGame`, `applyCommand`, legality queries, scoring, hashing, `replay`, `compareResults`. Shared with `server.js`. |
 | `js/content.js` | Versioned content: 5 themes, 353-word original bank with clues, 8 grid masks, seeded backtracking fill generator, Journey/Learn/Daily/Practice/Challenge defs, validators. |
 | `js/save.js`, `js/merge.js` | The save document (normalise, browser-save migration, merge, legacy settings keys) and the conflict merge. |
-| `js/strings.js`, `js/i18n.js`, `js/platform-strings.js` | Translation tables and lookups (classic scripts, loaded with `loadClassic`) (§10). |
+| `assets/strings.json` | Translation tables, read by the engine's `strings` (§10). |
 | `tools/ui-style.css` → `assets/ui-style.json` | The browser build's stylesheet rewritten class-based; converted by `npm run css` (`starhermit css`). |
 | `index.html`, `starhermit-files.json` | The web loader and file index written by `npm run package` (`starhermit package --web .`); never edited by hand. |
 | `score-script.js` | StarHermit platform script (`server=score-script.js`): range-checks a finished ranked round's total and posts it to the `high-score` leaderboard. |
@@ -170,7 +170,7 @@ Five themes (`THEMES`) recolour tiles, accent and the diorama: Harbor Dawn (`sky
 | Shadows | off | 1024² | 2048² | 4096² |
 | Ambient occlusion | off | off | ½ res, 8 samples | full res, 16 samples |
 | Bloom (emissive lights only, threshold 0.92) / colour grade + vignette | off | ½ res / on | ½ res / on | full res / on |
-| Anti-aliasing (Low keeps MSAA where the level has none; see `native/quality.ts`) | MSAA | FXAA | SMAA | MSAA |
+| Anti-aliasing | off | FXAA | SMAA | MSAA |
 | Reflections (RoomEnvironment) | off | on | on | on |
 | Materials | Lambert | Standard | Physical water | Physical water |
 | Paper / wood textures (within the level's largest) | 128 / 256 | 256 / 512 | 256 / 512 | 512 / 1024 |
@@ -184,7 +184,7 @@ The browser build's own Graphics section (per-effect overrides, GPU summary, Pau
 
 ## 9. Audio direction
 
-**Mix:** the runtime's buses (Options › Audio owns volumes, mute and the voice limit): authored one-shots on `effects` (the select tick on `interface`) at the browser build's effects level (0.8 × 0.5); the ambience — two seconds of low-passed brown noise rendered into a looping clip — on `effects` at 0.4 × 0.5; the pentatonic sine arpeggio (each note rendered once into a clip; 700 ms steps on the menus, 420 ms in play with a triangle bass on even steps) on `music` at 0.5 × 0.5. Sound starts with the first press that starts a round. Clips load one at a time once the mixer runs; the browser build's synthesized stand-ins for still-loading clips are not played.
+**Mix:** the runtime's buses (Options › Audio owns volumes, mute and the voice limit): authored one-shots on `effects` (the select tick on `interface`) at the browser build's effects level (0.8 × 0.5); the ambience — two seconds of low-passed brown noise rendered offline into a looping clip — on `effects` at 0.4 × 0.5; the pentatonic sine arpeggio (each note rendered once into a clip; 700 ms steps on the menus, 420 ms in play with a triangle bass on even steps) on `music` at 0.5 × 0.5. Sound starts with the first press that starts a round. Clips load one at a time once the mixer runs; the browser build's synthesized stand-ins for still-loading clips are not played.
 
 **SFX event table** (source of `sfx/manifest.txt`; several files back one event as variants):
 
@@ -211,7 +211,7 @@ Every meaningful sound has a visible counterpart (toast, glyph, banner or live-r
 
 The game ships in **nine locales**: en-US, en-GB, es-419, es-ES, de-DE, fr-FR, fr-CA, pt-BR, it-IT.
 
-- **Strings.** English source strings are the keys. `js/strings.js` holds the tables (rows `[en, es-419, de-DE, fr-FR, pt-BR, it-IT]`; en-GB is derived with British spelling — Harbour, colour, Traveller; es-ES and fr-CA list only their differences, e.g. "Ajustes", "Pointage"); `js/i18n.js` (`CJI18N.T(key, vars)`) looks them up; `js/platform-strings.js` holds the account and leaderboard lines. Every string is looked up as it is drawn: menus, mode and page names, blurbs, objective, HUD, clue headings and direction words, square descriptions, board summary, toasts, errors, lesson banners, help cards, results, achievements, theme names, dialogs.
+- **Strings.** English source strings are the keys. `assets/strings.json` holds the tables (rows `[en, es-419, de-DE, fr-FR, pt-BR, it-IT]`; en-GB is derived with British spelling — Harbour, colour, Traveller; es-ES and fr-CA list only their differences, e.g. "Ajustes", "Pointage"); `js/i18n.js` (`CJI18N.T(key, vars)`) looks them up; `js/platform-strings.js` holds the account and leaderboard lines. Every string is looked up as it is drawn: menus, mode and page names, blurbs, objective, HUD, clue headings and direction words, square descriptions, board summary, toasts, errors, lesson banners, help cards, results, achievements, theme names, dialogs.
 - **Clues stay English.** The word bank, answers and clues are English by construction (the grid is an English crossword in every language); the lesson that quotes a clue says so.
 - **Language setting.** The runtime's Options › Language (the player's choice, else the account's preferred language, else the device's) sets the interface language (`preferences().language`, mapped to the nearest shipped locale: es-MX → es-419, en-AU → en-GB, fr → fr-FR). Changing it re-renders everything in place without touching the round, its clock or the board.
 - **Layout.** Long text wraps (paragraphs at the column width); German shows nothing cut off at 390 px wide.

@@ -27,10 +27,10 @@ import * as R from "../js/rules.js";
 import * as C from "../js/content.js";
 import * as audio from "./audio.ts";
 import * as dio from "./diorama.ts";
-import { N, pt, tr } from "./i18n.ts";
+import { N, tr } from "./i18n.ts";
 import * as platform from "./platform.ts";
 import { lookFor, type Look } from "./quality.ts";
-import { drawScreens, BOARD_ID } from "./screens.ts";
+import { drawScreens, BOARD_ID, toastOffset } from "./screens.ts";
 import { applyLook as styleLook, applyTheme, initStyles } from "./style.ts";
 
 // ------------------------------------------------------------------ types
@@ -66,7 +66,6 @@ export const app = {
   openedFrame: 0,
   /** Widget to focus once the screen is built. */
   focusNext: null as string | null,
-  toasts: [] as { text: () => string; until: number }[],
   look: lookFor(levelSettings("molecular")) as Look,
   confirmGiveUp: false,
   /** Compact layouts: which drawers are open. */
@@ -104,10 +103,14 @@ export function fmtTime(ms: number): string {
 export const dirName = (dir: Dir): string => (dir === "across" ? tr("Across") : tr("Down"));
 
 // ------------------------------------------------------------------ toasts, announcements, haptics
-export function toast(text: () => string): void {
-  app.toasts.push({ text, until: frame().time + 4.2 });
-  while (app.toasts.length > 3) app.toasts.shift(); // never pile over the screen
-  ui.announce(text().slice(0, 500), { politeness: "polite" });
+let shownToasts: ui.Toast[] = [];
+/** A toast (4.2 s) at the top right under the bar; the newest three show, an older one goes (never pile over the screen). */
+export function toast(text: string): void {
+  shownToasts = shownToasts.filter((t) => t.queued);
+  while (shownToasts.length >= 3) shownToasts.shift()!.dismiss();
+  const hc = ui.preferences().highContrast ? { background: "#000000", border: { width: 2, color: "#ffffff" }, text: { color: "#ffffff" } } : {};
+  const shown = ui.toast!(text, { duration: 4.2, style: ["toast", hc], dismissible: false, position: "top", anchor: "right", offset: toastOffset() });
+  if (shown) shownToasts.push(shown);
 }
 export function announceError(msg: string): void { if (msg) ui.announce(msg.slice(0, 500), { politeness: "assertive" }); }
 function haptic(ms = 12): void { if (doc().settings.haptics) { try { vibrate(ms); } catch { /* unsupported */ } } }
@@ -156,7 +159,7 @@ function unlockAchievement(id: string, quiet = false): void {
   d.achievements[id] = Date.now();
   platform.persist();
   audio.play("achievement");
-  if (!quiet) toast(() => tr("Achievement unlocked: {name}", { name: tr(ACHIEVEMENTS[id]!.name) }));
+  if (!quiet) toast(tr("Achievement unlocked: {name}", { name: tr(ACHIEVEMENTS[id]!.name) }));
   session.newAchievements.push(id);
 }
 
@@ -236,11 +239,11 @@ function endRound(): void {
   const st = session.state!;
   // Verify locally: replay our own log before trusting the result.
   const check = R.replay(buildEnvelope()) as { ok: boolean; finalHash?: string };
-  app.toasts = []; // in-play toasts would sit over the results heading on phones
+  ui.clearToasts!(); // in-play toasts would sit over the results heading on phones
   session.verified = !!check.ok && check.finalHash === R.hashState(st);
   if (!session.verified) {
     console.warn("replay verification failed");
-    toast(() => tr("Local replay verification failed — score will not be submitted."));
+    toast(tr("Local replay verification failed — score will not be submitted."));
   }
   applyRoundOutcome(st);
   if (session.verified && session.def!.ranked) postToLeaderboard(Math.max(0, st.score.total));
@@ -278,12 +281,12 @@ function applyRoundOutcome(st: State): void {
 /** Signed in only: post a ranked round's total to the high-score board and show the rank on the results. */
 function postToLeaderboard(total: number): void {
   if (!platform.signedIn()) { session.lbLine = null; return; }
-  const posting = (): string => pt("lbPosting");
+  const posting = (): string => tr("starhermit.leaderboardPosting");
   session.lbLine = posting;
   const round = session.def;
   void platform.postLeaderboard(total).then((r) => {
     if (session.def !== round || session.lbLine !== posting) return;
-    session.lbLine = () => (!r.posted ? pt("lbNotPosted") : r.rank ? pt("lbRank", { rank: r.rank }) : pt("lbPosted"));
+    session.lbLine = () => (!r.posted ? tr("starhermit.leaderboardNotPosted") : r.rank ? tr("starhermit.leaderboardRank", { rank: r.rank }) : tr("starhermit.leaderboardPosted"));
   });
 }
 
@@ -367,7 +370,7 @@ function handleEvents(events: GameEvent[]): void {
         haptic(20);
         const e = session.state!.entries[ev.entry!]!;
         const streak = ev.streak;
-        toast(() => tr("Word complete: {number} {dir} (streak {streak})", { number: e.number, dir: dirName(e.dir), streak: streak ?? 0 }));
+        toast(tr("Word complete: {number} {dir} (streak {streak})", { number: e.number, dir: dirName(e.dir), streak: streak ?? 0 }));
         break;
       }
       case "check":
@@ -404,7 +407,7 @@ function watchdog(): void {
       session.timeWarned = true;
       audio.play("timeWarning");
       haptic(40);
-      toast(() => tr("30 seconds left!"));
+      toast(tr("30 seconds left!"));
       announceError(tr("30 seconds left."));
     }
   }
@@ -581,7 +584,7 @@ function advanceTutorial(events: GameEvent[]): void {
   session.tutorialStep++;
   if (session.tutorialStep < tut.steps.length) {
     showTutorialStep();
-    toast(() => tr("Lesson complete!"));
+    toast(tr("Lesson complete!"));
     audio.play("lesson");
   } else {
     session.tutorialFocus = null;
@@ -607,7 +610,7 @@ export function copyInvite(): void {
   if (!link) return;
   let ok = false;
   try { clipboard.writeText(link); ok = true; } catch { ok = false; }
-  toast(() => (ok ? pt("copied") : pt("copyFail", { link })));
+  toast(ok ? tr("starhermit.inviteCopied") : tr("starhermit.inviteLink", { link }));
 }
 export function signIn(): void { void requestSignIn().catch(() => undefined); }
 
@@ -707,7 +710,7 @@ onAction((e) => {
     }
     case "nextclue":
       if (kb && !onBoard) return; // Enter activates a focused button
-      nextEntry(kb && (isKeyDown("ShiftLeft") || isKeyDown("ShiftRight")) ? -1 : 1);
+      nextEntry(kb && e.shift ? -1 : 1);
       break;
     case "toggledir":
       if (kb && !onBoard) return; // Space activates a focused button
@@ -756,8 +759,6 @@ onUpdate(() => {
   applyLook();
   audio.update();
   watchdog();
-  const now = frame().time;
-  app.toasts = app.toasts.filter((t) => t.until > now);
 });
 onRender(() => {
   const f = frame();

@@ -11,11 +11,11 @@
 // levels (music 50 %, effects 80 %, ambience 40 %, each × 0.5) are folded
 // into each sound's gain. The ambience and the arpeggio's notes, which the
 // browser build played with oscillators and a noise buffer, are rendered
-// once into clips (createClip); the synthesized stand-ins it played while a
+// once into clips (OfflineAudioContext); the synthesized stand-ins it played while a
 // sample loaded are not ported (the engine's web runtime drops clip loads
 // while a synthesis graph changes). The one-shot clips all load at once in
 // onStart (every loaded clip reaches the mixer, natively and on the web).
-import { context, createClip, loadClip, play as playClip, type AudioClip, type Bus } from "starhermit:audio";
+import { context, createClip, loadClip, OfflineAudioContext, play as playClip, SoundBank, type AudioClip } from "starhermit:audio";
 
 const LEVEL = { music: 0.5 * 0.5, effects: 0.8 * 0.5, ambience: 0.4 * 0.5 };
 const SFX_EVENTS: Record<string, string> = {
@@ -27,12 +27,16 @@ const SFX_EVENTS: Record<string, string> = {
 };
 const EVENT_SAMPLES: Record<string, string[]> = {};
 for (const [name, ev] of Object.entries(SFX_EVENTS)) (EVENT_SAMPLES[ev] ??= []).push(name);
-const clips = new Map<string, AudioClip>();
-/** Loads every clip at once (onStart); a cue whose clips are all still loading is skipped. */
+const banks = new Map<string, SoundBank>();
+/** Loads every clip at once and renders the ambience and notes (onStart); a cue whose clips are still loading is skipped. */
 export function loadSfx(): void {
-  for (const name of Object.keys(SFX_EVENTS)) {
-    loadClip(`sfx/${name}.opus`).then((c) => { clips.set(name, c); }, (e: unknown) => console.warn(`sfx ${name}: ${String(e)}`));
+  for (const [event, names] of Object.entries(EVENT_SAMPLES)) {
+    void Promise.all(names.map((name) => loadClip(`sfx/${name}.opus`).catch((e: unknown) => { console.warn(`sfx ${name}: ${String(e)}`); return null; }))).then((loaded) => {
+      const list = loaded.filter((c) => c !== null);
+      if (list.length) banks.set(event, new SoundBank({ clips: list, bus: event === "select" ? "interface" : "effects", gain: LEVEL.effects }));
+    });
   }
+  renderTones().catch((e: unknown) => console.warn(`audio: ${String(e)}`));
 }
 
 let started = false;
@@ -46,67 +50,67 @@ export function setIntensity(n: number): void { intensity = n; }
 /** Plays a logical event's sample (a random variant); still-loading samples are silent. */
 export function play(event: string): void {
   if (!started) return;
-  const names = EVENT_SAMPLES[event];
-  if (!names?.length) return;
-  const file = names.length > 1 ? names[Math.floor(Math.random() * names.length)]! : names[0]!;
-  const clip = clips.get(file) ?? names.map((n) => clips.get(n)).find((c) => !!c);
-  if (!clip) return;
-  const bus: Bus = event === "select" ? "interface" : "effects";
-  try { playClip(clip, { bus, gain: LEVEL.effects }); }
+  try { banks.get(event)?.play(); }
   catch { /* the mixer is full this frame: skip it */ }
 }
 
 // -- the rendered ambience and arpeggio ------------------------------------------------------
 const RATE = 22050;
-/** A blip as js/audio.js's: an oscillator from `gain` falling exponentially to 0.001 over `dur`. */
-function blipClip(freq: number, dur: number, type: "sine" | "triangle", gain: number): AudioClip {
-  const n = Math.round((dur + 0.03) * RATE);
-  const out = new Float32Array(n);
-  const k = Math.log(0.001 / gain) / dur;
-  for (let i = 0; i < n; i++) {
-    const t = i / RATE;
-    const e = t < dur ? gain * Math.exp(k * t) : 0;
-    const ph = (freq * t) % 1;
-    const w = type === "sine" ? Math.sin(2 * Math.PI * ph) : 1 - 4 * Math.abs(ph - 0.5);
-    out[i] = w * e;
-  }
-  return createClip([out], RATE);
+/** A blip as js/audio.js's: an oscillator from `level` falling exponentially to 0.001 over `dur`. */
+async function renderBlip(freq: number, dur: number, type: "sine" | "triangle", level: number): Promise<AudioClip> {
+  const off = new OfflineAudioContext(1, Math.round((dur + 0.03) * RATE), RATE);
+  const osc = off.createOscillator();
+  osc.type = type;
+  osc.frequency.value = freq;
+  const gain = off.createGain();
+  gain.gain.setValueAtTime(level, 0);
+  gain.gain.exponentialRampToValueAtTime(0.001, dur);
+  gain.gain.setValueAtTime(0, dur);
+  osc.connect(gain).connect(off.destination);
+  osc.start();
+  const r = await off.startRendering();
+  return createClip(r);
 }
-/** Two seconds of brown-ish noise, low-passed at 480 Hz, at 0.35 (the ambience wash; seamless loop by a short crossfade). */
-function ambienceClip(): AudioClip {
-  const n = RATE * 2;
-  const out = new Float32Array(n);
-  let v = 0, lp = 0;
-  const a = 1 - Math.exp((-2 * Math.PI * 480) / RATE);
-  let seed = 12345;
-  const rnd = (): number => ((seed = (seed * 16807) % 2147483647) / 2147483647);
-  for (let i = 0; i < n; i++) {
-    v = v * 0.98 + (rnd() * 2 - 1) * 0.02;
-    lp += a * (v * 3 - lp);
-    out[i] = lp * 0.35;
-  }
-  const fade = Math.round(RATE * 0.05);
-  for (let i = 0; i < fade; i++) { const w = i / fade; out[i] = out[i]! * w + out[n - fade + i]! * (1 - w); }
-  return createClip([out.subarray(0, n - fade).slice()], RATE);
+/** Two seconds of brown noise, low-passed at 480 Hz (the ambience wash; periodic once the filter settles, so it loops seamlessly). */
+async function renderAmbience(): Promise<AudioClip> {
+  const n = RATE * 2, settle = Math.round(RATE * 0.25);
+  const off = new OfflineAudioContext(1, settle + n, RATE);
+  const noise = off.createNoise({ color: "brown", seed: 12345, seconds: 2 });
+  const lp = off.createBiquadFilter();
+  lp.type = "lowpass";
+  lp.frequency.value = 480;
+  const gain = off.createGain();
+  gain.gain.value = 0.269; // make-up to the old wash's measured rms (0.0551)
+  noise.connect(lp).connect(gain).connect(off.destination);
+  noise.start();
+  const r = await off.startRendering();
+  const loop = r.getChannelData(0).slice(settle);
+  return createClip([loop], RATE);
+}
+async function renderTones(): Promise<void> {
+  ambience = await renderAmbience();
+  const render = async (list: number[], dur: number, type: "sine" | "triangle", level: number): Promise<AudioClip[]> => {
+    const out: AudioClip[] = [];
+    for (const f of list) out.push(await renderBlip(f, dur, type, level));
+    return out;
+  };
+  const menu = await render(SCALE, 0.5, "sine", 0.12), play = await render(SCALE, 0.5, "sine", 0.16);
+  bass = await render(SCALE.map((f) => f / 2), 0.7, "triangle", 0.08);
+  notes = [menu, play];
 }
 const SCALE = [262, 294, 330, 392, 440, 523, 587, 659];
-const notes: AudioClip[][] = []; // [menu, play] gains per scale step
-const bass: AudioClip[] = [];
+let notes: AudioClip[][] = []; // [menu, play] gains per scale step
+let bass: AudioClip[] = [];
 let ambience: AudioClip | null = null;
 let ambienceStarted = false;
 let nextStep = 0;
 let step = 0;
 
-/** Each frame once the mixer runs: one rendered clip a frame, then (once unlocked) the
+/** Each frame once the mixer runs and the tones are rendered: (once unlocked) the
  * ambience loop and the arpeggio by mixer time. */
 export function update(): void {
   if (context.state !== "running") return; // starting the ambience and music still waits for the mixer
-  try {
-    if (!ambience) { ambience = ambienceClip(); return; }
-    if (notes.length < 2) { notes.push(SCALE.map((f) => blipClip(f, 0.5, "sine", notes.length ? 0.16 : 0.12))); return; }
-    if (bass.length < SCALE.length) { bass.push(blipClip(SCALE[bass.length]! / 2, 0.7, "triangle", 0.08)); return; }
-  } catch (e) { console.warn(`audio: ${String(e)}`); return; }
-  if (!started) return;
+  if (!started || !ambience || !notes.length) return;
   if (!ambienceStarted) {
     ambienceStarted = true;
     try { playClip(ambience, { bus: "effects", gain: LEVEL.ambience, loop: true }); } catch { ambienceStarted = false; }
