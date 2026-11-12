@@ -1,0 +1,98 @@
+{
+  "game": {
+    "id": "f1408715-e758-48d7-bec4-6edb3722d029",
+    "displayName": "Crossword Journey",
+    "hosting": {
+      "hostingEnabled": true,
+      "hostedUrl": "https://f1408715-e758-48d7-bec4-6edb3722d029.starhermit.com/index.html",
+      "deployStatus": "live",
+      "pinnedCommitSha": null,
+      "deployedCommitSha": null,
+      "deployError": null,
+      "deployedAt": "2026-11-12T08:13:46.44506+00:00",
+      "externalLaunchUrl": null,
+      "engineVersion": "1.38.0",
+      "deployWarning": null
+    }
+  },
+  "publishedAt": "2026-11-12T08:13:53.257Z",
+  "sourceCommit": "0bd5adc38c03e13774b799a24d034b8a2c5b276b",
+  "bytesReceived": 1799729,
+  "archiveSha256": "b56307dc83ef3afe1e829776665915ac9cc66e9d00d501c884b53928f564dd88",
+  "indexSha256": "78bdff5d1a4beab57ccfde7903fc0ee317c388ee4c6740f1c566fbd7715ee7d6",
+  "result": {
+    "clientPublished": true,
+    "serverImageLoaded": false,
+    "imageDigest": null,
+    "bytesReceived": 1799729,
+    "mode": "replace",
+    "filesRemoved": 0,
+    "engineVersion": "1.38.0",
+    "deployWarning": null
+  },
+  "liveVerification": {
+    "at": "2026-11-12T08:13:53.257Z",
+    "files": [
+      {
+        "file": "starhermit-files.json",
+        "sha256": "78bdff5d1a4beab57ccfde7903fc0ee317c388ee4c6740f1c566fbd7715ee7d6",
+        "status": 200
+      },
+      {
+        "file": "assets/localization/Japanese.otf",
+        "sha256": "0495fecfb239a26af393ca099942a8979b32ffa8bb46fd886a3bd7f01813d41e",
+        "status": 200
+      },
+      {
+        "file": "assets/localization/Khmer.ttf",
+        "sha256": "8be79e3115cdb412139d97f5bf8b81323ea9f774f79575ef5092702e45e5f9f1",
+        "status": 200
+      },
+      {
+        "file": "assets/localization/SimplifiedChinese.otf",
+        "sha256": "51ad7dfde98d5bc3b908b2998225387524e2134b6b8f1c9e8a2a2d7303f1dc30",
+        "status": 200
+      },
+      {
+        "file": "assets/localization/Tamil.ttf",
+        "sha256": "878550731bf35c8b785ee614cb27fa120f26632048a8c63cc0ca163d26f477c1",
+        "status": 200
+      },
+      {
+        "file": "assets/localization/TraditionalChinese.otf",
+        "sha256": "d9eace5d9d50cbd6b56fd449ef3ce5cc651d63615cdfcce3f1decec8148e7d38",
+        "status": 200
+      },
+      {
+        "file": "assets/localization/common.json",
+        "sha256": "d6a7eadad97eba99e6764de4e5cac974fea88e0e0d4bfa79dbbeaa3622ef768e",
+        "status": 200
+      },
+      {
+        "file": "assets/localization/fonts.json",
+        "sha256": "37beaea0dba54c9f2c45995cbf9fd19fad21719d701718c41d7e58dd7748ca13",
+        "status": 200
+      },
+      {
+        "file": "assets/localization/locales.json",
+        "sha256": "58ec707f2f02bc35bfcad88a2e184e5df2f71c219365042aeb4361a67ff77a1d",
+        "status": 200
+      },
+      {
+        "file": "assets/strings.json",
+        "sha256": "8e3f8bd4e610235ee498d6418479728e498e2fdb419d04448b8c11c012f5485f",
+        "status": 200
+      },
+      {
+        "file": "index.html",
+        "sha256": "1c7111e689e16cd995add21d59329dbfb3cb4eddfdda371192b1d5849ba03714",
+        "status": 200
+      },
+      {
+        "file": "starhermit.txt",
+        "sha256": "b798f5819cbc2a5ddb6b94a8c6d42dd62164a4a07d50e65e6be1947d1e56dea9",
+        "status": 200
+      }
+    ]
+  }
+}
