@@ -1,3 +1,4 @@
+import { localizedDrawOptions as __l10nDrawOptions } from "./l10n/font.ts";
 // The crossword board as the browser build's DOM grid drew it (index.html
 // #board, js/main.js buildBoard/renderCells, css/style.css .board/.cell):
 // cream tiles in 2 px tile-edge grout on a rounded board, void squares
@@ -135,13 +136,13 @@ export function buildBoard(id: string, cell: number): void {
           for (let o = -cs; o < cs; o += 8 * k) draw.line(x + o, y + cs, x + o + cs, y, "#0000001f", 2 * k, clip);
         }
         const num = numbers.get(i);
-        if (num !== undefined) draw.text(String(num), x + 4 * k, y + 2 * k, { size: Math.max(9.6, cs / k * 0.17) * k, weight: "600", color: hc ? "#333333" : "#5b6472" });
+        if (num !== undefined) draw.text(String(num), x + 4 * k, y + 2 * k, __l10nDrawOptions({ size: Math.max(9.6, cs / k * 0.17) * k, weight: "600", color: hc ? "#333333" : "#5b6472" }));
         if (c.cur) {
           const size = Math.max(20.8, cell * 0.4) * k;
           const col = isOk ? ok : isWrong ? wrong : isRev ? rev : ink;
-          const m = draw.measureText(c.cur, { size, weight: "700" });
+          const m = draw.measureText(c.cur, __l10nDrawOptions({ size, weight: "700" }));
           const ty = y + (cs - m.height) / 2;
-          draw.text(c.cur, x + cs / 2, ty, { size, weight: "700", color: col, align: "center" });
+          draw.text(c.cur, x + cs / 2, ty, __l10nDrawOptions({ size, weight: "700", color: col, align: "center" }));
           if (cvd && isOk) draw.rect(x + cs / 2 - m.width / 2, ty + m.height * 0.92, m.width, 2 * k, ok);
         }
         // state marks in the bottom-right corner

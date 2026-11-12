@@ -1,3 +1,5 @@
+// localization-runtime:attached
+import { setLocalizedStyles as __l10nStyles } from "./l10n/font.ts";
 // The look of the screens: the browser build's css/style.css, rewritten
 // class-based in tools/ui-style.css and converted once with `starhermit css`
 // into assets/ui-style.json (`npm run css`), registered at start. The theme
@@ -58,13 +60,13 @@ export function initStyles(): void {
     pressed: "#e8dcc0", field: "#ffffff", accent: "#d96c47", focus: "#ffb020", outline: "#d9cfae",
   });
   ui.setTokens(css.tokens);
-  ui.setStyles(styles());
+  __l10nStyles(styles());
 }
 
 /** Detailed scenery from the graphics level (quality.ts). */
 export function applyLook(l: Look): void {
   look = l;
-  if (css) ui.setStyles(styles());
+  if (css) __l10nStyles(styles());
 }
 
 /** A content theme (js/content.js THEMES): its colours into the tokens. */

@@ -1,3 +1,4 @@
+import { withLanguageRender as __l10nRender } from "./l10n/menu.ts";
 // Crossword Journey on the StarHermit engine: the entry module (starhermit.txt
 // engine.entry), played natively by the StarHermit client and in browsers by
 // the engine's web runtime. The rules (js/rules.js) and the content
@@ -760,8 +761,12 @@ onUpdate(() => {
   audio.update();
   watchdog();
 });
-onRender(() => {
+onRender(__l10nRender(() => {
   const f = frame();
   dio.update(f.width, f.height, f.delta);
   drawScreens();
-});
+}));
+
+// localization-runtime:menu
+import { installLanguageMenu as __installLanguageMenu } from "./l10n/menu.ts";
+__installLanguageMenu(false);
