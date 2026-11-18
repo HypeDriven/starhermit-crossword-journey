@@ -124,7 +124,7 @@ function artWidget(id: string, path: string, w: number, h: number, radius: numbe
 }
 
 // ------------------------------------------------------------------ the frame
-export function drawScreens(): void {
+function drawScreensImmediate(): void {
   const L = layoutNow();
   const f = frame();
   ui.column("page", () => {
@@ -744,3 +744,10 @@ function giveUpDialog(L: Layout): void {
 /** A toast's distance from the top: 8 px under the bar, less the stack's 16 px margin. */
 export function toastOffset(): number { return H("topbar", 56) + 8 - 16; }
 export { show };
+
+export function drawScreens(): void {
+  if (!(app.sub === "help")) { drawScreensImmediate(); return; }
+  const actions = ["up","down","left","right","nextclue","toggledir","clear","checkword","checkgrid","reveal","pause"];
+  const version = JSON.stringify([(app as any).settings ?? (app as any).options ?? {}, (platform as any).options ?? {}, actions.map((action) => bindings(action))]);
+  ui.retain!("help-screen", version, drawScreensImmediate);
+}

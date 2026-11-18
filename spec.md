@@ -3,13 +3,13 @@
 **Status:** shipped; this document describes the game as it runs today.
 **Pitch:** a travel journal whose pages are small crosswords — solve clue-driven words across five scenic regions, one shared page every UTC day.
 **Genre:** clue puzzle (mini crosswords, 5×5 to 9×9). **Players:** 1; ranked results stay on the device and post to the platform board when signed in. **Session:** 2–5 minutes for a 5×5 page, 10–25 minutes for a 9×9 mastery or challenge page.
-**Platforms:** a StarHermit engine script game (engine 1.39.0, host API 1.39, `engine.minor=39`): played natively by the StarHermit client and in desktop and mobile browsers by the engine's web runtime, portrait and landscape. **Rendering:** the board, clues and HUD are `starhermit:ui` widgets (the accessible truth) over a purely decorative `starhermit:scene` papercraft diorama.
+**Platforms:** a StarHermit engine script game (engine 1.44.1, host API 1.44, `engine.minor=44`): played natively by the StarHermit client and in desktop and mobile browsers by the engine's web runtime, portrait and landscape. **Rendering:** the board, clues and HUD are `starhermit:ui` widgets (the accessible truth) over a purely decorative `starhermit:scene` papercraft diorama.
 
 ## 1. File map
 
 | Path | Role |
 |---|---|
-| `starhermit.txt` | Manifest: `launch=index.html`, `engine.entry=native/main.ts`, `engine.version=1.39.0`, `engine.minor=39`, capabilities `platform,storage,clipboard`, `server=score-script.js`, controls and gamepad defaults (§6). |
+| `starhermit.txt` | Manifest: `launch=index.html`, `engine.entry=native/main.ts`, `engine.version=1.44.1`, `engine.minor=44`, capabilities `platform,storage,clipboard`, `server=score-script.js`, controls and gamepad defaults (§6). |
 | `native/main.ts` | Entry module: state machine, round lifecycle, command dispatch (pre-validated), time-limit watchdog and 30 s warning, selection, input (keys, letters field, actions), Learn lessons, achievements, Journey progress, results with the local replay check and the leaderboard post, lifecycle (fixed 60 Hz steps). |
 | `native/screens.ts` | Every screen as immediate-mode `starhermit:ui`: top bar, title, mode select, play (wide / compact / short-landscape layouts), results, Settings, Help, pause dialog, give-up confirm, toasts. |
 | `native/board.ts` | The board: one `region` widget drawn with `starhermit:draw` (tiles, grout, numbers, letters, state colours and ✓ ✗ ◆ marks drawn as shapes, selection, lesson pulse, CVD hatching, paper shading), a `ui.target` per square, tap hit-testing. |
@@ -295,3 +295,9 @@ The game ships in **nine locales**: en-US, en-GB, es-419, es-ES, de-DE, fr-FR, f
 The string tables include complete regional variants for `fr-BE`, `de-BE`, `en-SG`, `en-HK`, `en-BQ`, `es-CO`, `de-IT`, `fr-IT`, `es-CL`, `es-AR`, `es-EC`, `de-BR`. These reuse the corresponding existing translations in their language family. The runtime can resolve the exact regional tag. Language selection is available from the game’s Options panel or F2 and is saved per player in `ui.language`. Changes apply during play. Additional national, regional and indigenous language packs are only shipped once every English message has a translation with intact placeholders and markup. Complete additional language tables: `nl-BE`, `zh-SG`, `ms-SG`, `ta-SG`, `zh-HK`, `nl-NL`, `fi-FI`, `sv-FI`, `et-EE`, `id-ID`, `vi-VN`, `ja-JP`, `yue-HK`, `da-DE`, `eu-FR`, `ca-FR`, `oc-FR`, `sl-IT`, `ca-IT`, `oc-IT`, `ru-FI`, `ca-ES`, `eu-ES`, `gl-ES`, `ru-EE`, `su-ID`, `km-VN`, `lb-BE`, `co-FR`, `fur-IT`, `bew-ID`.
 
 <!-- regional-localization:end -->
+
+## Engine 1.44.1
+
+Browser play uses the WebGPU-only StarHermit 1.44.1 web runtime. Automatic ray-traced shadows are enabled on supported Vulkan devices, with mapped-shadow fallbacks elsewhere. Packaging creates block-compressed runtime textures and compressed glTF copies, retaining original image fallbacks.
+
+The help screen replays through retained native UI while its contents, options, layout and key bindings are unchanged.
