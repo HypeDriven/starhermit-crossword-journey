@@ -509,6 +509,7 @@ export function applyLook(next: Look): void {
     overRange: "keep", // mix(c, s + max(c - 1, 0), amount) as the page's grade
   } : null;
   renderer.antialias = next.antialias;
+  renderer.motionBlur = next.bloom !== null ? { intensity: 0.25, samples: 8, maxPixels: 16, targetFps: 60, camera: false } : null;
   refresh();
 }
 export function setTheme(t: Theme): void { theme = t; refresh(); }
