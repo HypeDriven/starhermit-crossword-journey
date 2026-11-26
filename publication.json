@@ -12,7 +12,7 @@
     "metadataSource": "starhermit.txt",
     "createdAt": "2026-09-01T07:00:59.486812+00:00",
     "coverArtSource": "manifest",
-    "coverArtUpdatedAt": "2026-11-23T17:01:32.636718+00:00",
+    "coverArtUpdatedAt": "2026-11-26T15:20:18.308636+00:00",
     "submittedByUserId": "2712e04e-461b-4d23-81ae-e40b429128a8",
     "submittedByUsername": "starhermit",
     "hosting": {
@@ -22,9 +22,9 @@
       "pinnedCommitSha": null,
       "deployedCommitSha": null,
       "deployError": null,
-      "deployedAt": "2026-11-23T17:01:32.626941+00:00",
+      "deployedAt": "2026-11-26T15:20:18.295637+00:00",
       "externalLaunchUrl": null,
-      "engineVersion": "1.47.0",
+      "engineVersion": "1.50.0",
       "deployWarning": null
     },
     "description": "Solve clue-based crossword puzzles as you travel through a journal of scenic destinations.",
@@ -36,19 +36,19 @@
     "links": [],
     "isDisabled": false
   },
-  "publishedAt": "2026-11-23T17:01:32.741Z",
-  "sourceCommit": "c5be2981fb7715bbf28d4d0a8cf8f546b16d15b2",
-  "bytesReceived": 3733803,
-  "archiveSha256": "cb98068c094281ee53a14364ed8bf54cc4c5a28a2893b0bcff71734200289314",
+  "publishedAt": "2026-11-26T15:20:17.378Z",
+  "sourceCommit": "d95580a61901b0a2702b849957d8889b39a0daed",
+  "bytesReceived": 3733798,
+  "archiveSha256": "c1412fe034915179357423eb4be1c3823f53b1ca2bec395c069f2ac281ebc517",
   "indexSha256": "7fee78b6079cece0cc9994bebdf1d26feb29c1403f53d4a946228c79c7eb3236",
   "result": {
     "clientPublished": true,
     "serverImageLoaded": false,
     "imageDigest": null,
-    "bytesReceived": 3733803,
+    "bytesReceived": 3733798,
     "mode": "replace",
     "filesRemoved": 0,
-    "engineVersion": "1.47.0",
+    "engineVersion": "1.50.0",
     "deployWarning": null
   },
   "liveVerification": {
