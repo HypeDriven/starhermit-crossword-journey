@@ -42,7 +42,7 @@
     "native/quality.ts": {"sha256": "a089cfe4a834af9bc4ac5373fd11700cbd369bc3f2ddd7a0661c90c54bfc2247", "size": 4413},
     "native/screens.ts": {"sha256": "39e325b867833b0e3a25f47add02830055bc39acce75a6987f2a99400f609312", "size": 46652},
     "native/style.ts": {"sha256": "2563b011d38f1c23b432dfdd369586e3598178c43efdb9ead27fa2cf0ea9b2cd", "size": 4356},
-    "publication.json": {"sha256": "7926314efd2c1f3acba461f7b45f89a6d6619372dcff9b8836ab538335cd5d7f", "size": 4138},
+    "publication.json": {"sha256": "ad9e31e111398e2615e0d22e576792524003ac5fc165d4bc23e01f9ada503d58", "size": 4138},
     "score-script.js": {"sha256": "4133359e8234cac920651c89f79485aa401cdca970720662e50150de4431f600", "size": 2487},
     "sfx/book-close.opus": {"sha256": "722f3eb9bc89b0825da538edd81f594750bb961e8336b97a95185388c2931cb3", "size": 23165},
     "sfx/check-mark.opus": {"sha256": "38ff8214cce54e4596c5aad1513162219669ad0da59fe8780e4fe6b497852c50", "size": 12187},
