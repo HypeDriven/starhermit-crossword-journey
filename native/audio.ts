@@ -36,7 +36,6 @@ export function loadSfx(): void {
       if (list.length) banks.set(event, new SoundBank({ clips: list, bus: event === "select" ? "interface" : "effects", gain: LEVEL.effects }));
     });
   }
-  renderTones().catch((e: unknown) => console.warn(`audio: ${String(e)}`));
 }
 
 let started = false;
@@ -108,7 +107,17 @@ let step = 0;
 
 /** Each frame once the mixer runs and the tones are rendered: (once unlocked) the
  * ambience loop and the arpeggio by mixer time. */
+let __bedsStarted = false;
+function startBeds(): void {
+  if (__bedsStarted) return;
+  __bedsStarted = true;
+  void (async () => {
+    renderTones().catch((e: unknown) => console.warn(`audio: ${String(e)}`));
+  })();
+}
+
 export function update(): void {
+  startBeds();
   if (context.state !== "running") return; // starting the ambience and music still waits for the mixer
   if (!started || !ambience || !notes.length) return;
   if (!ambienceStarted) {
